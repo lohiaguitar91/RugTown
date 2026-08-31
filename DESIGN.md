@@ -122,6 +122,22 @@ Run box** (cushion slopes, chutes, and bells — real physics), the **Night
 Lights box** (lights-out mode: glow strips, lamp pools, firefly jar), and
 new floors. Each box is a real toy with a real idea, never a piece-dump.
 
+**Parked idea — the Toy-a-fy box.** A step past "trace your floor" above:
+send the photo to a vision model and get back a starter floor with pieces
+already placed — a real couch becomes a cushion mountain, a real bookshelf
+becomes book tunnels, your actual rug's edge becomes road tiles — abstracted
+into our generic toy vocabulary, never a photo-textured reproduction of
+your room (which is also what keeps it inside § 3's discipline: nothing a
+vision pass sees, including someone else's branded stuff sitting in the
+room, survives past the abstraction). Genuinely on-pitch, but it is the
+one feature in this doc that isn't free to build: it needs a server call
+and a real per-use inference cost, which doesn't fit "pay once, nothing
+consumable" (§ 6) without its own pricing answer (most likely a one-time
+unlock like the other boxes, not a metered add-on), and it needs an
+explicit answer on photo privacy (processed and discarded, never stored,
+never trains anything) before it's more than an idea. Not scoped into any
+phase in § 9 — it needs its own small spike on cost and privacy first.
+
 ## 5. The toy systems
 
 **Building.** Pieces live in a toy bin at the screen edge; drag out, they
@@ -134,6 +150,15 @@ to place or fail — a riser simply won't ghost-snap unless there's already
 a book, cushion, or riser underneath it to climb onto. Height is graph
 validity, not a simulated load, so a shipped layout can't teeter or fall
 over on its own; it stays deterministic per pillar 1's no-fail promise.
+
+**Trace your floor.** Snap one photo of your actual floor and it drops in
+as a translucent underlay behind the builder — eyeball where your real
+doorway, couch, and rug edge are and build the graph right over them. No
+AI, no upload: the photo is decoded and drawn on-device only, is never
+part of a saved layout or a share link, and can be cleared at any time.
+This is the whole "the floor is the world" pillar (§ 2) made literal, at
+the cost of a camera permission and nothing else — no server call, no
+per-use cost, fits the existing stack (§ 8) as-is.
 
 **The wind-up.** Drag an engine or car backward to wind it — farther is
 more — and release. A small spring meter lives on the toy. Wind-ups run
@@ -217,7 +242,10 @@ the app as the product:**
   one canvas, DOM for the toy bin and menus; synthesized WebAudio
   throughout. With three products, the shared library decided in the
   arcade review (renderer helpers, audio kit, save, GameConnect bridge)
-  becomes real — Rug Town consumes it, never forks it.
+  becomes real — Rug Town consumes it, never forks it. Client-only, no
+  server, no exceptions in v1 — the one thing on the horizon that would
+  break this is the parked Toy-a-fy box (§ 4), which is exactly why it
+  stays parked until it has its own answer on cost and privacy.
 - **Rendering:** 2.5D isometric canvas — layered sprites with pre-rendered
   rotations for rolling stock, tilt-shift via blur bands. The Phase 0
   spike (§ 9) decides whether curves-under-lamplight need a light WebGL
