@@ -247,9 +247,20 @@ the app as the product:**
   break this is the parked Toy-a-fy box (§ 4), which is exactly why it
   stays parked until it has its own answer on cost and privacy.
 - **Rendering:** 2.5D isometric canvas — layered sprites with pre-rendered
-  rotations for rolling stock, tilt-shift via blur bands. The Phase 0
-  spike (§ 9) decides whether curves-under-lamplight need a light WebGL
-  layer; the bet is they don't.
+  rotations, tilt-shift via blur bands. This is the right, cheap call for
+  the builder's top-down and tilt-shift miniature cameras, where the
+  viewing angle is fixed or narrow enough that a handful of pre-rendered
+  rotations covers it — no engine, no pipeline beyond an art tool
+  exporting PNGs. It's the riskiest call for **carpet level**, the one
+  camera that moves — low, close, orbiting behind a train around a curve
+  — which is exactly the angle where pre-rendered sprite rotations read
+  as flat instead of round. If the Phase 0 spike's carpet-level test
+  doesn't hold up on sprites, the fallback isn't a full 3D pivot: model
+  only the handful of things that actually move through that shot (engine,
+  cars, peg people) in Blender, export to glTF, render with a light
+  three.js layer loaded as a plain `<script>` tag (no build step broken);
+  rug tiles, scenery, and blocks stay flat 2.5D sprites either way, since
+  they never need to look right from an orbiting camera.
 - **Sim:** two graphs (rail, road) + automata ticked at fixed dt;
   deterministic per layout + seed so shared layouts replay identically.
   Save = the piece list + seed; a floor serializes to a few KB — that's
@@ -267,9 +278,12 @@ the app as the product:**
 
 - **Phase 0 — the feel spike (3–4 wks).** Snap-build + wind-up + follow
   train + the crossing gate + the first music-box notes, on one small rug.
-  Go/no-go: hand it to someone cold; if they don't smile at the crossing
-  bell inside two minutes, stop and rework feel — nothing downstream fixes
-  a toy that doesn't feel like a toy.
+  Build and judge the carpet-level camera **first**, not last — it's the
+  spike's highest-risk assumption (§ 8: sprites may not hold up at that
+  angle), and it's cheaper to find out in week one than after the rest of
+  the spike is built around it. Go/no-go: hand it to someone cold; if they
+  don't smile at the crossing bell inside two minutes, stop and rework
+  feel — nothing downstream fixes a toy that doesn't feel like a toy.
 - **Phase 1 — the core toy (6–8 wks).** Full Living Room bin, floors/saves,
   the three cameras, photo + clip export, peg-people errands, postcards.
 - **Phase 2 — launch (4–6 wks).** Web demo + share links, Toy Chest IAP,
