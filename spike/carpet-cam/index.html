@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Rug Town — carpet-cam spike</title>
+<style>
+  html,body{margin:0;height:100%;background:#1a120c;overflow:hidden}
+  canvas{display:block;width:100vw;height:100vh;touch-action:none;cursor:pointer}
+  pre{color:#eee;font:12px monospace;padding:8px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<pre id="out" hidden></pre>
+<script>
+  // Surface errors on-page — this spike gets tested on phones without devtools.
+  window.onerror = function (msg, src, line, col) {
+    var out = document.getElementById('out');
+    out.hidden = false;
+    out.textContent = 'ERROR: ' + msg + ' @' + line + ':' + col;
+    document.title = out.textContent;
+  };
+</script>
+<script src="main.js"></script>
+</body>
+</html>
