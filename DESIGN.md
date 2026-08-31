@@ -101,7 +101,7 @@ The content catalog. Everything below is v1 unless marked as a later box.
 
 | Bin | Pieces | Notes |
 |-----|--------|-------|
-| Rails | straights, curves, Y-switches, crossings, risers, buffer stops, a clackety drawbridge | peg-and-hole snap; risers climb onto books and cushions |
+| Rails | straights, curves, Y-switches, crossings, risers, buffer stops, a clackety drawbridge | peg-and-hole snap; a riser only snaps where a book, cushion, or another riser is already there to climb onto — the furniture is the brace, so there's no separate support piece and nothing to engineer |
 | Trains | wind-up engines; boxcar, tanker, caboose; couple/uncouple by dragging | pull back to wind — the pull-back toy is the core verb |
 | Roads | rug-road tiles: straight, corner, intersection, roundabout | the road rug pattern: grey lanes, yellow dashes |
 | Cars | pull-back cars, a bus, a fire truck | obey rug roads; stop at crossings |
@@ -129,7 +129,11 @@ ghost-snap to the nearest valid spot, click in with sound + haptic. Rails
 form a graph; roads form a second graph; crossings join them. Rotation by a
 twist handle or a tap. Deleting flicks the piece back into the bin. There
 is no build menu, no grid overlay, no error toast — the toy itself is the
-interface.
+interface. Elevation works the same way: no structural physics, no bracing
+to place or fail — a riser simply won't ghost-snap unless there's already
+a book, cushion, or riser underneath it to climb onto. Height is graph
+validity, not a simulated load, so a shipped layout can't teeter or fall
+over on its own; it stays deterministic per pillar 1's no-fail promise.
 
 **The wind-up.** Drag an engine or car backward to wind it — farther is
 more — and release. A small spring meter lives on the toy. Wind-ups run
@@ -275,3 +279,10 @@ de-risks the bigger build either way. Cross-promotion both ways via the
    building (pillar 3, § 2), and it stands out from generic phone-game
    screenshots. Phone shots stay in the listing as secondary, confirmed
    with real renders at Phase 2.
+7. **Elevation: physics or hand-held? — decided: hand-held, no bracing
+   piece.** A riser only ghost-snaps where a book, cushion, or another
+   riser is already there to climb onto (§ 4, § 5) — the furniture is the
+   brace. No structural physics, no separate support piece to place or
+   fail. Keeps faith with pillar 1 (no-fail) and pillar 3 (invalid
+   placements simply don't exist) without building a physics engine the
+   toy doesn't need.
