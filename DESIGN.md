@@ -6,10 +6,10 @@ dashes, pull-back cars, couch-cushion mountains — you build it, wind it up,
 and get down on the carpet to watch it run. For the adults who remember the
 floor, not for today's toddlers.
 
-Status: draft, unbuilt. Written Aug 30 2026 for review. Spun out of the
-Lunchbox Arcade parking lot (review round 2: standalone product, not a wing
-game). Third product of the shop — same stack, same rules about respecting
-the player's money.
+Status: draft, unbuilt. Written Aug 30 2026 for review; review round 1
+decisions locked Aug 31 2026 (§ 10). Spun out of the Lunchbox Arcade parking
+lot (review round 2: standalone product, not a wing game). Third product of
+the shop — same stack, same rules about respecting the player's money.
 
 ---
 
@@ -251,18 +251,27 @@ Default plan: Rug Town's Phase 0 spike runs after the arcade's Phase 2
 de-risks the bigger build either way. Cross-promotion both ways via the
 "from the makers of" sticker, per the arcade doc.
 
-## 10. Open questions for review
+## 10. Review decisions (round 1, Aug 31 2026)
 
-1. **Name.** *Rug Town* recommended; DIY trademark/store/domain search
-   before anything ships. Alternates: *The Good Rug*, *Living Room Line*.
-2. **Price.** $6.99 Toy Chest is the bet (premium toy, impulse-adjacent);
-   $4.99 and $8.99 are the sensitivity checks at soft launch.
-3. **The music box: core or later?** Specced as core (§ 5) because it's
-   the differentiator; it's also the spike's riskiest line item. If the
-   Phase 0 spike shows it needs real tuning time, does it slip to Phase 1
-   or hold the spike?
-4. **The cat at v1?** Pure charm, nonzero animation cost. In the bet: yes
-   — she's the clip-maker. Cut line if Phase 1 runs long.
-5. **Sequencing.** Spike after arcade Phase 2 (default), or parallel now?
-6. **Tablet-first marketing** (iPad on carpet as the hero image) vs
-   phone-first screenshots — decide at Phase 2 with real renders.
+1. **Name — decided: *Rug Town*.** Aligned in review; DIY trademark/
+   store/domain search still happens before anything ships.
+2. **Price — decided: $6.99 Toy Chest.** Ship the bet as specced; $4.99
+   and $8.99 stay as the sensitivity checks to run at soft launch.
+3. **The music box — decided: core.** Stays in Phase 0 as the
+   differentiator, not deferred to Phase 1, even as the spike's riskiest
+   line item.
+4. **The cat at v1 — decided: yes.** She's in the v1 bet as the
+   clip-maker; the Phase-1-runs-long cut line stays on the table but she
+   ships by default.
+5. **Sequencing — decided: spike after Lunchbox Arcade's Phase 2**
+   (the default plan). The spike is cheap enough that waiting costs
+   little, and it keeps the shop's attention on getting the arcade's
+   revenue live instead of running two Phase 0s at once. Revisit only if
+   the arcade's Phase 2 stalls hard.
+6. **Tablet-first marketing — decided: tablet-first hero.** Lead store
+   and marketing renders with an iPad on an actual carpet, not phone
+   screenshots — it's the truest picture of the core fantasy (get down
+   on the floor with it), it reads better for two-finger pan/zoom
+   building (pillar 3, § 2), and it stands out from generic phone-game
+   screenshots. Phone shots stay in the listing as secondary, confirmed
+   with real renders at Phase 2.
