@@ -28,7 +28,8 @@
 const TRACK = { straight: 45, radius: 20, bedW: 4.0, grooveOff: 1.1, grooveW: 0.38, pieceStraight: 15, curvePieces: 4 };
 const ROAD = { w: 7.0, x: 8, xFar: -58, zEnd: 40, corner: 12, dashLen: 3, dashGap: 3.5, dashW: 0.55 };
 const RUG = { w: 150, d: 100, corner: 12 };
-const CAM = { height: 4.2, follow: 30, fovY: 50 * Math.PI / 180, near: 0.6, aimUp: 2.4 };
+const CAM = { height: 5.0, follow: 30, fovY: 50 * Math.PI / 180, near: 0.6, aimUp: 3.5 };
+const RAIL_H = 1.2;   // the wooden pieces are blocks, not paint: bed top sits this far above the rug
 const ENGINE = { speedMax: 26, drainPerCm: 1 / 700 };      // full spring ≈ 3+ laps
 // The car runs a touch faster than the train so its wait at the gate locks its
 // phase to the train's: once it has waited once, it arrives as the gate drops
@@ -53,7 +54,7 @@ const C = {
   wallTop: '#120b07', wallBot: '#2b1a10',
   floor: '#462c1a', floorSeam: '#382214',
   rugField: '#a34a2e', rugBorder: '#7c3722', rugStripe: '#d9a441',
-  bed: '#d9b077', groove: '#8a6238', jointGap: '#b5854f', peg: '#caa36a',
+  bed: '#d9b077', bedSide: '#b08a58', groove: '#8a6238', jointGap: '#b5854f', peg: '#caa36a',
   road: '#625d56', roadEdge: '#8a857a', dash: '#d9a441',
   post: '#5a4632', armA: '#e6dccb', armB: '#b83a2a', bell: '#caa36a', bellRim: '#8a6238', crossbuck: '#e6dccb',
 };
@@ -257,7 +258,7 @@ function updateCamera(dt, snap) {
 const TRIPOD = (() => {
   const o = (Q.get('tripod') || '').split(',').map(Number);
   if (o.length === 6 && o.every(isFinite)) return { pos: v3(o[0], o[1], o[2]), target: v3(o[3], o[4], o[5]) };
-  return { pos: v3(-14, 4.8, -46), target: v3(6, 2.3, -22) };
+  return { pos: v3(-14, 5.4, -46), target: v3(6, 3.2, -22) };
 })();
 const CLIPCAM = { toTripod: 5.6, blendIn: 0.9, fromTripod: 11.8, blendOut: 2.0, swingOutCtrl: v3(20, 14, -75) };
 
@@ -493,31 +494,65 @@ const roadTile = s => Math.floor(wrapS(ROADPATH, s) / ROAD_TILE);
 // Build state, for the trailer: how many rail pieces / road tiles exist (a
 // fraction means that one is still dropping in), and whether the gate and
 // the vehicles are on the rug yet. Live play never touches this.
-const VIS = { rail: Infinity, road: Infinity, gate: true, engine: true, car: true, engineLift: 0 };
-const DROP_H = 7;
+const VIS = { rail: Infinity, road: Infinity, gate: true, engine: true, car: true, engineLift: 0, dragFrom: null, dragCount: 0 };
+const DROP_H = 7, HOVER_H = 2.4;
+let PIECE_CENTER = [], TILE_CENTER = [];   // filled once GROUND exists
+
+// Where an in-progress piece sits, relative to its final place: the first
+// VIS.dragCount rail pieces are dragged in from VIS.dragFrom (hover, travel,
+// settle — the toy-bin verb), everything else drops in from above.
+function placeOffset(kind, idx, f) {
+  const dragged = kind === 'piece' && VIS.dragFrom && idx < VIS.dragCount;
+  if (!dragged) return v3(0, Math.pow(1 - f, 2) * DROP_H, 0);
+  const c = PIECE_CENTER[idx];
+  const travel = 1 - smooth(Math.min(1, f / 0.82));
+  const settle = Math.min(1, (1 - f) / 0.18);
+  return v3((VIS.dragFrom.x - c.x) * travel, HOVER_H * settle + 0.3 * travel, (VIS.dragFrom.z - c.z) * travel);
+}
 function builtQuad(q, built) {
-  const idx = q.piece !== undefined ? q.piece : q.tile;
+  const kind = q.piece !== undefined ? 'piece' : 'tile';
+  const idx = kind === 'piece' ? q.piece : q.tile;
   if (idx === undefined || idx + 1 <= built) return q;
   if (idx >= built) return null;
-  const lift = Math.pow(1 - (built - idx), 2) * DROP_H;
-  return q.map(p => v3(p.x, p.y + lift, p.z));
+  const o = placeOffset(kind, idx, built - idx);
+  return q.map(p => v3(p.x + o.x, p.y + o.y, p.z + o.z));
+}
+const isMoving = (q, built) => { const idx = q.piece !== undefined ? q.piece : q.tile; return idx !== undefined && idx < built && idx + 1 > built; };
+// World position of the rail piece being dragged right now (for a finger overlay), or null.
+function dragPos() {
+  if (!VIS.dragFrom || VIS.rail >= VIS.dragCount || VIS.rail <= 0) return null;
+  const idx = Math.floor(VIS.rail), f = VIS.rail - idx;
+  if (f <= 0 || f >= 1) return null;
+  const c = PIECE_CENTER[idx], o = placeOffset('piece', idx, f);
+  return v3(c.x + o.x, RAIL_H + o.y, c.z + o.z);
 }
 
 const GROUND = (() => {
   const bw = TRACK.bedW / 2, go = TRACK.grooveOff, gw = TRACK.grooveW / 2;
   const rtag = s => ({ piece: railPiece(s) }), ttag = s => ({ tile: roadTile(s) });
-  const bedQuads = ribbon(RAIL, -bw, bw, 2.5, 0.02, 0, RAIL.total, rtag);
-  const grooves = [ribbon(RAIL, -go - gw, -go + gw, 2.5, 0.03, 0, RAIL.total, rtag), ribbon(RAIL, go - gw, go + gw, 2.5, 0.03, 0, RAIL.total, rtag)];
-  const jointBands = [], pegs = [];
-  for (const js of JOINTS) {
-    jointBands.push(...ribbon(RAIL, -bw, bw, 0.7, 0.035, js - 0.35, js + 0.35, () => ({ piece: railPiece(js + 0.01) })));
+  const top = RAIL_H;
+  const bedQuads = ribbon(RAIL, -bw, bw, 2.5, top + 0.02, 0, RAIL.total, rtag);
+  const grooves = [ribbon(RAIL, -go - gw, -go + gw, 2.5, top + 0.03, 0, RAIL.total, rtag), ribbon(RAIL, go - gw, go + gw, 2.5, top + 0.03, 0, RAIL.total, rtag)];
+  const jointBands = [], pegs = [], sides = [];
+  const at = (s, off, y) => { const { p, tan } = pathAt(RAIL, s); return v3(p.x - tan.z * off, y, p.z + tan.x * off); };
+  for (let s = 0; s < RAIL.total; s += 2.5) {
+    const s2 = Math.min(s + 2.5, RAIL.total), tag = { piece: railPiece(s + 1.25) };
+    sides.push(Object.assign([at(s, -bw, 0), at(s, -bw, top), at(s2, -bw, top), at(s2, -bw, 0)], tag));
+    sides.push(Object.assign([at(s, bw, 0), at(s, bw, top), at(s2, bw, top), at(s2, bw, 0)], tag));
+  }
+  JOINTS.forEach((js, k) => {
+    jointBands.push(...ribbon(RAIL, -bw, bw, 0.7, top + 0.035, js - 0.35, js + 0.35, () => ({ piece: railPiece(js + 0.01) })));
     const c = pathAt(RAIL, js).p, pr = 0.55, ring = [];
     for (let i = 0; i < 10; i++) {
       const a = i / 10 * 2 * Math.PI;
-      ring.push(v3(c.x + pr * Math.cos(a), 0.04, c.z + pr * Math.sin(a)));
+      ring.push(v3(c.x + pr * Math.cos(a), top + 0.04, c.z + pr * Math.sin(a)));
     }
     pegs.push(Object.assign(ring, { piece: railPiece(js + 0.01) }));
-  }
+    // end caps, one per piece meeting here, so a lifted piece shows a solid end
+    const cap = [at(js, -bw, 0), at(js, bw, 0), at(js, bw, top), at(js, -bw, top)];
+    sides.push(Object.assign([...cap], { piece: k }));
+    sides.push(Object.assign([...cap], { piece: (k + JOINTS.length - 1) % JOINTS.length }));
+  });
   const rw = ROAD.w / 2;
   const roadQuads = ribbon(ROADPATH, -rw, rw, 3, 0.012, 0, ROADPATH.total, ttag);
   const roadEdges = [ribbon(ROADPATH, -rw, -rw + 0.5, 3, 0.014, 0, ROADPATH.total, ttag), ribbon(ROADPATH, rw - 0.5, rw, 3, 0.014, 0, ROADPATH.total, ttag)];
@@ -532,8 +567,10 @@ const GROUND = (() => {
   const rugField = roundedRect(RUG.w - 11, RUG.d - 11, RUG.corner - 4);
   const seams = [];
   for (let z = -280; z <= 280; z += 9) seams.push([v3(-300, 0.005, z), v3(300, 0.005, z)]);
-  return { bedQuads, grooves, jointBands, pegs, roadQuads, roadEdges, dashes, rugOuter, rugStripeOut, rugField, seams };
+  return { bedQuads, grooves, jointBands, pegs, sides, roadQuads, roadEdges, dashes, rugOuter, rugStripeOut, rugField, seams };
 })();
+PIECE_CENTER = JOINTS.map((js, k) => { const e = k + 1 < JOINTS.length ? JOINTS[k + 1] : RAIL.total; return pathAt(RAIL, (js + e) / 2).p; });
+TILE_CENTER = Array.from({ length: Math.ceil(ROADPATH.total / ROAD_TILE) }, (_, k) => pathAt(ROADPATH, (k + 0.5) * ROAD_TILE).p);
 
 // ---------------------------------------------------------------- dust motes
 
@@ -570,8 +607,6 @@ function render() {
   const layers = [
     [[GROUND.rugOuter], C.rugBorder, Infinity], [[GROUND.rugStripeOut], C.rugStripe, Infinity], [[GROUND.rugField], C.rugField, Infinity],
     [GROUND.roadQuads, C.road, VIS.road], [GROUND.roadEdges[0], C.roadEdge, VIS.road], [GROUND.roadEdges[1], C.roadEdge, VIS.road], [GROUND.dashes, C.dash, VIS.road],
-    [GROUND.bedQuads, C.bed, VIS.rail], [GROUND.grooves[0], C.groove, VIS.rail], [GROUND.grooves[1], C.groove, VIS.rail],
-    [GROUND.jointBands, C.jointGap, VIS.rail], [GROUND.pegs, C.peg, VIS.rail],
   ];
   for (const [quads, color, built] of layers) {
     for (const q0 of quads) {
@@ -580,13 +615,38 @@ function render() {
       const p = clipProject(q); if (p) fillPoly(ctx, p, color);
     }
   }
+  // the track is a stack of wooden blocks: side faces far-to-near, then the
+  // tops; the piece currently being placed is drawn last so it passes over
+  // the ones already down
+  const trackTops = [[GROUND.bedQuads, C.bed], [GROUND.grooves[0], C.groove], [GROUND.grooves[1], C.groove], [GROUND.jointBands, C.jointGap], [GROUND.pegs, C.peg]];
+  for (const moving of [false, true]) {
+    const sideDraw = [];
+    for (const q0 of GROUND.sides) {
+      if (isMoving(q0, VIS.rail) !== moving) continue;
+      const q = builtQuad(q0, VIS.rail); if (!q) continue;
+      sideDraw.push({ z: toCam(q[0]).z + toCam(q[2]).z, q });
+    }
+    sideDraw.sort((a, b) => b.z - a.z);
+    for (const s of sideDraw) { const p = clipProject(s.q); if (p) fillPoly(ctx, p, C.bedSide); }
+    for (const [quads, color] of trackTops) for (const q0 of quads) {
+      if (isMoving(q0, VIS.rail) !== moving) continue;
+      const q = builtQuad(q0, VIS.rail); if (!q) continue;
+      const p = clipProject(q); if (p) fillPoly(ctx, p, color);
+    }
+  }
 
   // things that stand up get depth-sorted together
   const items = [];
   const eng = pathAt(RAIL, S.eng.s), car = pathAt(ROADPATH, S.car.s);
-  const engAt = VIS.engineLift ? { p: v3(eng.p.x, VIS.engineLift, eng.p.z), tan: eng.tan } : eng;
+  const engAt = { p: v3(eng.p.x, RAIL_H + VIS.engineLift, eng.p.z), tan: eng.tan };
+  let bump = 0;
+  for (const c of CROSSINGS) {
+    const d = Math.min(wrapS(ROADPATH, S.car.s - c.roadS), wrapS(ROADPATH, c.roadS - S.car.s));
+    bump = Math.max(bump, RAIL_H * smooth(1 - Math.max(0, Math.min(1, (d - 2.6) / 3.2))));
+  }
+  const carAt = { p: v3(car.p.x, bump, car.p.z), tan: car.tan };
   if (VIS.engine) items.push({ z: toCam(eng.p).z, draw: () => drawSprite(sprites.engine, engAt, [[5.2, 3.4, 0.16], [3.6, 2.4, 0.22]]) });
-  if (VIS.car) items.push({ z: toCam(car.p).z, draw: () => drawSprite(sprites.car, car, [[4.2, 2.6, 0.16], [3.0, 1.9, 0.22]]) });
+  if (VIS.car) items.push({ z: toCam(car.p).z, draw: () => drawSprite(sprites.car, carAt, [[4.2, 2.6, 0.16], [3.0, 1.9, 0.22]]) });
   if (VIS.gate) for (const c of CROSSINGS) for (const g of gateGeometry(c)) items.push(g);
   items.sort((a, b) => b.z - a.z);
   for (const it of items) it.draw();
@@ -602,7 +662,7 @@ function drawSprite(set, at, shadowRings) {
     for (let i = 0; i < 14; i++) {
       const t = i / 14 * 2 * Math.PI;
       const lx = Math.cos(t) * rz, lz = Math.sin(t) * rx;
-      ring.push(v3(at.p.x + lx * -at.tan.z + lz * at.tan.x, 0.05, at.p.z + lx * at.tan.x + lz * at.tan.z));
+      ring.push(v3(at.p.x + lx * -at.tan.z + lz * at.tan.x, at.p.y + 0.05, at.p.z + lx * at.tan.x + lz * at.tan.z));
     }
     const p = clipProject(ring);
     if (p) fillPoly(ctx, p, `rgba(20,10,5,${a})`);

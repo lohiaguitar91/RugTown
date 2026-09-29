@@ -35,10 +35,12 @@ the carpet and watch it run. **The floor was the first open world.**
   frame, through headless Chromium.
 - **The trailer.** `spike/carpet-cam/trailer.html?trailer=1` plays a
   43-second cut over the same renderer, structured on the toy's loop — build
-  it (the pieces snap onto the empty rug one by one), wind it up (pull the
-  engine back, let go), watch it run (the carpet-level cam and the crossing)
-  — then three cards and the title. `&t=<sec>` freezes a frame. Every toy
-  sound comes from the page's own timeline: `render-clip.mjs` with
+  it (a finger drags the first pieces out of a toy bin and clicks them onto
+  the empty rug, the rest fill in), wind it up (the finger pulls the engine
+  back, lets go), watch it run (the carpet-level cam and the crossing) —
+  then three cards and the title. The bin and the finger are the trailer's
+  picture of the build verb, not the real toy bin yet (that's Phase 1).
+  `&t=<sec>` freezes a frame. Every toy sound comes from the page's own timeline: `render-clip.mjs` with
   `TRAILER=1` captures the frames, `mix-trailer.mjs` synthesizes the clacks,
   snaps, hush, ratchet and bell from `__trailer.events()` — no sampled
   sounds, per DESIGN.md §3. It ships captioned rather than narrated (TTS

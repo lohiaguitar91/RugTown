@@ -42,14 +42,45 @@ const NARRATION = [
 
 // ---------------------------------------------------------------- the build (shot A) and the wind-up (shot B)
 
-const BUILD = { railFrom: 3.4, railDur: 3.3, roadFrom: 6.7, roadDur: 1.7, gateAt: 8.5 };
+// The first three pieces are dragged out of the toy bin by a finger, slowly
+// enough to read; the rest fill in fast, then the road tiles, then the gate.
 const RAIL_PIECES = JOINTS.length, ROAD_TILES = Math.ceil(ROADPATH.total / ROAD_TILE);
+const BUILD = { start: 2.6, dragCount: 3, railDurs: [0.95, 0.95, 0.95, ...Array(RAIL_PIECES - 3).fill(0.16)], tileDur: 0.075, gap: 0.2 };
+BUILD.railEnd = BUILD.start + BUILD.railDurs.reduce((a, b) => a + b, 0);
+BUILD.roadFrom = BUILD.railEnd + BUILD.gap;
+BUILD.roadEnd = BUILD.roadFrom + ROAD_TILES * BUILD.tileDur;
+BUILD.gateAt = BUILD.roadEnd + BUILD.gap;
+
+function countAt(t, start, durs) {
+  let acc = start;
+  for (let i = 0; i < durs.length; i++) {
+    if (t < acc) return i;
+    if (t < acc + durs[i]) return i + (t - acc) / durs[i];
+    acc += durs[i];
+  }
+  return durs.length;
+}
+const BIN = { w: 372, h: 82, slotW: 100, slotH: 54 };
+const binRect = () => ({ x: W - BIN.w - 44, y: H - BIN.h - 28, w: BIN.w, h: BIN.h });
+const binSlot = i => { const b = binRect(); return { x: b.x + 22 + i * 114 + BIN.slotW / 2, y: b.y + 14 + BIN.slotH / 2 }; };
+
+// Screen pixel -> the point on the plane y = h under it (needs buildView()).
+function unproject(sx, sy, h) {
+  const dx = (sx - W / 2) / focal, dy = (H / 2 - sy) / focal;
+  const dir = norm(add(add(scale3(view.right, dx), scale3(view.upv, dy)), view.fwd));
+  const t = (h - view.pos.y) / dir.y;
+  return add(view.pos, scale3(dir, t));
+}
 
 function buildState(t) {
-  VIS.rail = t < BUILD.railFrom ? 0 : Math.min(RAIL_PIECES, (t - BUILD.railFrom) / BUILD.railDur * RAIL_PIECES);
-  VIS.road = t < BUILD.roadFrom ? 0 : Math.min(ROAD_TILES, (t - BUILD.roadFrom) / BUILD.roadDur * ROAD_TILES);
+  VIS.rail = countAt(t, BUILD.start, BUILD.railDurs);
+  VIS.road = Math.max(0, Math.min(ROAD_TILES, (t - BUILD.roadFrom) / BUILD.tileDur));
   VIS.gate = t >= BUILD.gateAt;
   VIS.engine = false; VIS.car = false;
+  VIS.dragCount = BUILD.dragCount;
+  buildView();
+  const s = binSlot(0);
+  VIS.dragFrom = unproject(s.x, s.y - 6, 0);
 }
 
 const WIND = { dropAt: 9.2, dropDur: 0.5, restS: 22, pullFrom: 9.9, pullTo: 10.7, pullS: 13, releaseAt: 11.05, accel: 42 };
@@ -68,19 +99,19 @@ function windState(t) {
 
 const tripod = () => ({ pos: TRIPOD.pos, target: TRIPOD.target });
 const overRug = u => ({ pos: lerp3(v3(-6, 84, -102), v3(-8, 60, -80), ease(u)), target: v3(-10, 0, -6) });
-const behindEngine = () => ({ pos: v3(-28, 4.3, -19.6), target: v3(-0.5, 2.4, -20) });
+const behindEngine = () => ({ pos: v3(-28, 5.2, -19.6), target: v3(-0.5, 3.4, -20) });
 const bellClose = u => ({ pos: v3(21 - u * 1.5, 5.2, -39), target: v3(12.5, 3.8, -27) });
-const throughGate = () => ({ pos: v3(2.5, 3.4, -6), target: v3(8, 2.3, -24) });
+const throughGate = () => ({ pos: v3(2.5, 4.2, -6), target: v3(8, 3.2, -24) });
 
 // ---------------------------------------------------------------- shot list
 
 const SHOTS = [
-  { t0: 0, t1: 9.2, setup: t => buildState(t), cam: overRug, fadeIn: 0.8, texts: [
-    { s: 'Before any of us had a console, we had a rug.', at: 0.8, until: 3.4, style: 'lower' },
-    { s: 'The track clicked together in exactly one satisfying way.', at: 4.4, until: 8.9, style: 'lower', stack: 1 },
+  { t0: 0, t1: 9.2, name: 'build', setup: t => buildState(t), cam: overRug, fadeIn: 0.8, texts: [
+    { s: 'Before any of us had a console, we had a rug.', at: 0.8, until: 3.1, style: 'lower' },
+    { s: 'The track clicked together in exactly one satisfying way.', at: 3.9, until: 8.9, style: 'lower', stack: 1 },
     { s: 'Build it.', at: 3.7, until: 8.9, style: 'lower' },
   ] },
-  { t0: 9.2, t1: 13.0, setup: t => windState(t), cam: behindEngine, texts: [
+  { t0: 9.2, t1: 13.0, name: 'wind', setup: t => windState(t), cam: behindEngine, texts: [
     { s: 'Pull the engine back. Let go.', at: 9.9, until: 12.7, style: 'lower', stack: 1 },
     { s: 'Wind it up.', at: 9.6, until: 12.7, style: 'lower' },
   ] },
@@ -155,6 +186,53 @@ function drawText(tx, t) {
   ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
 }
 
+function drawFinger(p, alpha, pressed) {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.globalAlpha = alpha;
+  const r = pressed ? 21 : 27;
+  ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 6.29); ctx.fillStyle = 'rgba(255,240,215,0.26)'; ctx.fill();
+  ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(255,240,215,0.9)'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, 6.29); ctx.fillStyle = 'rgba(255,240,215,0.95)'; ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+// The toy bin: a wooden tray at the bottom of the screen with three slots —
+// straight, curve, road tile. Purely the trailer's picture of the real thing.
+function drawBin(alpha, activeSlot) {
+  if (alpha <= 0) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.globalAlpha = alpha;
+  const b = binRect();
+  ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 4;
+  roundRect(b.x, b.y, b.w, b.h, 12); ctx.fillStyle = '#4a3626'; ctx.fill();
+  ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  ctx.lineWidth = 2; ctx.strokeStyle = '#2e2017'; ctx.stroke();
+  ctx.font = '11px "IBM Plex Mono", monospace'; ctx.fillStyle = 'rgba(240,225,200,0.5)'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText('TOY BIN', b.x + 14, b.y - 8);
+  for (let i = 0; i < 3; i++) {
+    const s = binSlot(i), x = s.x - BIN.slotW / 2, y = s.y - BIN.slotH / 2;
+    roundRect(x, y, BIN.slotW, BIN.slotH, 8); ctx.fillStyle = i === activeSlot ? '#6f5540' : '#5c4534'; ctx.fill();
+    if (i === 0) {           // straight: a beige plank with two grooves
+      roundRect(s.x - 36, s.y - 8, 72, 16, 3); ctx.fillStyle = C.bed; ctx.fill();
+      ctx.fillStyle = C.groove; ctx.fillRect(s.x - 36, s.y - 4, 72, 2.2); ctx.fillRect(s.x - 36, s.y + 2, 72, 2.2);
+    } else if (i === 1) {    // curve: the same plank, bent
+      ctx.lineCap = 'butt';
+      ctx.beginPath(); ctx.arc(s.x - 6, s.y + 26, 34, -Math.PI * 0.92, -Math.PI * 0.32); ctx.lineWidth = 16; ctx.strokeStyle = C.bed; ctx.stroke();
+      ctx.beginPath(); ctx.arc(s.x - 6, s.y + 26, 37.5, -Math.PI * 0.92, -Math.PI * 0.32); ctx.lineWidth = 2.2; ctx.strokeStyle = C.groove; ctx.stroke();
+      ctx.beginPath(); ctx.arc(s.x - 6, s.y + 26, 30.5, -Math.PI * 0.92, -Math.PI * 0.32); ctx.stroke();
+    } else {                 // road tile: grey with a yellow dash
+      roundRect(s.x - 26, s.y - 18, 52, 36, 4); ctx.fillStyle = C.road; ctx.fill();
+      ctx.fillStyle = C.dash; ctx.fillRect(s.x - 8, s.y - 1.5, 16, 3);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
 // Put the sim, build state and camera where trailer time t says. Returns the shot.
 // Every shot starts from the clip snapshot, so a shot that drives the engine
 // by hand (the wind-up) can't leak its position into the next one.
@@ -166,14 +244,37 @@ function setup(t) {
   if (shot !== lastShot) { clipRestore(); lastShot = shot; }
   if (shot.card) return shot;
   if (shot.sim) clipSeek(shot.sim(u));      // also sets the clip's own camera for that time
-  if (shot.setup) shot.setup(t);
   if (shot.cam) { const c = shot.cam(u); cam.pos = c.pos; cam.target = c.target; }
+  if (shot.setup) shot.setup(t);            // after the camera: the build unprojects the bin through it
   return shot;
+}
+
+function overlays(shot, t) {
+  if (shot.name === 'build') {
+    const a = fade(t, 1.6, BUILD.gateAt + 0.5, 0.5, 0.5);
+    const dragging = VIS.rail > 0 && VIS.rail < BUILD.dragCount;
+    drawBin(a, dragging ? 0 : -1);
+    const p = dragPos();
+    if (p) { const c = toCam(p); if (c.z > CAM.near) drawFinger(toScreen(c), a, true); }
+    else if (t >= BUILD.start - 0.4 && VIS.rail <= 0) drawFinger(binSlot(0), a * ease((t - (BUILD.start - 0.4)) / 0.3), false);
+  }
+  if (shot.name === 'wind') {
+    // the finger on the engine, pulling it back, then letting go
+    if (t >= WIND.pullFrom - 0.25 && t < WIND.releaseAt + 0.45) {
+      const eng = pathAt(RAIL, S.eng.s).p;
+      const c = toCam(v3(eng.x, RAIL_H + 3.2, eng.z));
+      if (c.z > CAM.near) {
+        const s = toScreen(c), gone = Math.max(0, (t - WIND.releaseAt) / 0.45);
+        drawFinger({ x: s.x, y: s.y - gone * 40 }, Math.min(1, (t - (WIND.pullFrom - 0.25)) / 0.25) * (1 - gone), t < WIND.releaseAt);
+      }
+    }
+  }
 }
 
 function renderAt(t) {
   const shot = setup(t);
   if (shot.card) card(); else render();
+  if (!shot.card) overlays(shot, t);
   for (const tx of shot.texts || []) drawText(tx, t);
   let dip = 0;
   if (shot.fadeIn) dip = Math.max(dip, 1 - ease((t - shot.t0) / shot.fadeIn));
