@@ -301,6 +301,20 @@ de-risks the bigger build either way. Cross-promotion both ways via the
 
 1. **Name — decided: *Rug Town*.** Aligned in review; DIY trademark/
    store/domain search still happens before anything ships.
+   *DIY name check, Sep 29 2026 (web search only — not a USPTO/TESS
+   search, not legal advice):* no game, app, or store listing called
+   "Rug Town" turned up on Steam, itch.io, or the app stores — the
+   game/app space looks clear. **Flag:** "Rug Town" / "RugTown" is an
+   active rug retailer in Plano, TX (rugtownplano.net, Yelp, Facebook,
+   Instagram @rugtownplano) and a separate Etsy shop selling Turkish rugs
+   (Etsy /shop/RugTown, Instagram @rugtown, Pinterest @rugtown). Those are
+   rug *sellers* — a different goods/services category from a game — so
+   this reads as a low-risk collision, not a blocker, but two practical
+   consequences: the bare @rugtown handles are already taken (plan on
+   @playrugtown or @rugtowngame), and rugtown.com availability wasn't
+   confirmed either way. Before shipping: a direct USPTO search on the
+   mark in the software/games classes, and the app-store name check with
+   a real developer account.
 2. **Price — decided: $6.99 Toy Chest.** Ship the bet as specced; $4.99
    and $8.99 stay as the sensitivity checks to run at soft launch.
 3. **The music box — decided: core.** Stays in Phase 0 as the
