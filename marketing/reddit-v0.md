@@ -1,9 +1,11 @@
 # Reddit post, v0 — "here's my idea"
 
-Status: draft for the first public post. Media: `media/rugtown-crossing.gif`
-(the 14-second crossing loop) — lead with the GIF, not the text. No brand
-names anywhere in the post or the comments (DESIGN.md §3); "the wooden train
-set," "the road rug," "pull-back cars" are the words.
+Status: draft for the first public post. Media: lead with
+`media/rugtown-trailer.mp4` (45 s, narrated: build it → wind it up → watch it
+run, then the pitch cards) as a native video post; `media/rugtown-crossing.gif`
+(the 14-second loop) is the fallback for subs that prefer GIFs or for the
+comments. No brand names anywhere in the post or the comments (DESIGN.md
+§3); "the wooden train set," "the road rug," "pull-back cars" are the words.
 
 ## Title (pick one)
 
@@ -53,6 +55,10 @@ floor?** Which piece was the one you fought your sibling for?
 
 ## Before posting
 
+- Watch the trailer with sound once yourself. The narration is a synthetic
+  voice (Piper TTS) and the toy sounds are synthesized from the sim's own
+  events — say so if anyone asks, and consider re-recording the narration in
+  your own voice before a bigger post; the cue times are in `trailer.js`.
 - The DIY name check in DESIGN.md §10 Q1 — if it flagged a collision, decide
   on the name before the post, not after.
 - Reply to every "what did you build on your floor" answer; that thread is

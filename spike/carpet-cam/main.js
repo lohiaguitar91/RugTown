@@ -45,7 +45,7 @@ const Q = new URLSearchParams(location.search);
 const FRAME_CHOICES = [8, 16, 32, 64];
 const clampFrames = n => FRAME_CHOICES.includes(n) ? n : 16;
 const spriteFrames = clampFrames(parseInt(Q.get('frames') || '16', 10));
-const clipMode = Q.get('clip') === '1' || Q.get('clipcheck') === '1';
+const clipMode = Q.get('clip') === '1' || Q.get('clipcheck') === '1' || Q.get('trailer') === '1';
 
 // ---------------------------------------------------------------- palette (lamp-lit, warm)
 
@@ -469,7 +469,9 @@ function roundedRect(w, d, corner, segs = 6) {
   return pts;
 }
 
-function ribbon(path, offA, offB, step, y, from = 0, to = path.total) {
+// Quads along a path. `tag(s)` attaches build-order metadata (which piece or
+// road tile a quad belongs to) so the trailer can snap the layout in piece by piece.
+function ribbon(path, offA, offB, step, y, from = 0, to = path.total, tag = null) {
   const at = (s, off) => {
     const { p, tan } = pathAt(path, s);
     return v3(p.x - tan.z * off, y, p.z + tan.x * off);
@@ -477,33 +479,53 @@ function ribbon(path, offA, offB, step, y, from = 0, to = path.total) {
   const quads = [];
   for (let s = from; s < to; s += step) {
     const s2 = Math.min(s + step, to);
-    quads.push([at(s, offA), at(s, offB), at(s2, offB), at(s2, offA)]);
+    const q = [at(s, offA), at(s, offB), at(s2, offB), at(s2, offA)];
+    if (tag) Object.assign(q, tag(s + (s2 - s) / 2));
+    quads.push(q);
   }
   return quads;
 }
 
+const railPiece = s => { let k = -1; for (const j of JOINTS) if (j <= s + 1e-6) k++; return Math.max(0, k); };
+const ROAD_TILE = 13.57;
+const roadTile = s => Math.floor(wrapS(ROADPATH, s) / ROAD_TILE);
+
+// Build state, for the trailer: how many rail pieces / road tiles exist (a
+// fraction means that one is still dropping in), and whether the gate and
+// the vehicles are on the rug yet. Live play never touches this.
+const VIS = { rail: Infinity, road: Infinity, gate: true, engine: true, car: true, engineLift: 0 };
+const DROP_H = 7;
+function builtQuad(q, built) {
+  const idx = q.piece !== undefined ? q.piece : q.tile;
+  if (idx === undefined || idx + 1 <= built) return q;
+  if (idx >= built) return null;
+  const lift = Math.pow(1 - (built - idx), 2) * DROP_H;
+  return q.map(p => v3(p.x, p.y + lift, p.z));
+}
+
 const GROUND = (() => {
   const bw = TRACK.bedW / 2, go = TRACK.grooveOff, gw = TRACK.grooveW / 2;
-  const bedQuads = ribbon(RAIL, -bw, bw, 2.5, 0.02);
-  const grooves = [ribbon(RAIL, -go - gw, -go + gw, 2.5, 0.03), ribbon(RAIL, go - gw, go + gw, 2.5, 0.03)];
+  const rtag = s => ({ piece: railPiece(s) }), ttag = s => ({ tile: roadTile(s) });
+  const bedQuads = ribbon(RAIL, -bw, bw, 2.5, 0.02, 0, RAIL.total, rtag);
+  const grooves = [ribbon(RAIL, -go - gw, -go + gw, 2.5, 0.03, 0, RAIL.total, rtag), ribbon(RAIL, go - gw, go + gw, 2.5, 0.03, 0, RAIL.total, rtag)];
   const jointBands = [], pegs = [];
   for (const js of JOINTS) {
-    jointBands.push(...ribbon(RAIL, -bw, bw, 0.7, 0.035, js - 0.35, js + 0.35));
+    jointBands.push(...ribbon(RAIL, -bw, bw, 0.7, 0.035, js - 0.35, js + 0.35, () => ({ piece: railPiece(js + 0.01) })));
     const c = pathAt(RAIL, js).p, pr = 0.55, ring = [];
     for (let i = 0; i < 10; i++) {
       const a = i / 10 * 2 * Math.PI;
       ring.push(v3(c.x + pr * Math.cos(a), 0.04, c.z + pr * Math.sin(a)));
     }
-    pegs.push(ring);
+    pegs.push(Object.assign(ring, { piece: railPiece(js + 0.01) }));
   }
   const rw = ROAD.w / 2;
-  const roadQuads = ribbon(ROADPATH, -rw, rw, 3, 0.012);
-  const roadEdges = [ribbon(ROADPATH, -rw, -rw + 0.5, 3, 0.014), ribbon(ROADPATH, rw - 0.5, rw, 3, 0.014)];
+  const roadQuads = ribbon(ROADPATH, -rw, rw, 3, 0.012, 0, ROADPATH.total, ttag);
+  const roadEdges = [ribbon(ROADPATH, -rw, -rw + 0.5, 3, 0.014, 0, ROADPATH.total, ttag), ribbon(ROADPATH, rw - 0.5, rw, 3, 0.014, 0, ROADPATH.total, ttag)];
   const dashes = [];
   for (let s = 0; s < ROADPATH.total; s += ROAD.dashLen + ROAD.dashGap) {
     // no dashes across the rails — the bed sits on top there anyway
     if (CROSSINGS.some(c => Math.abs(s + ROAD.dashLen / 2 - c.roadS) < 4)) continue;
-    dashes.push(...ribbon(ROADPATH, -ROAD.dashW / 2, ROAD.dashW / 2, ROAD.dashLen, 0.016, s, Math.min(s + ROAD.dashLen, ROADPATH.total)));
+    dashes.push(...ribbon(ROADPATH, -ROAD.dashW / 2, ROAD.dashW / 2, ROAD.dashLen, 0.016, s, Math.min(s + ROAD.dashLen, ROADPATH.total), ttag));
   }
   const rugOuter = roundedRect(RUG.w, RUG.d, RUG.corner);
   const rugStripeOut = roundedRect(RUG.w - 8, RUG.d - 8, RUG.corner - 3);
@@ -546,19 +568,26 @@ function render() {
   }
 
   const layers = [
-    [[GROUND.rugOuter], C.rugBorder], [[GROUND.rugStripeOut], C.rugStripe], [[GROUND.rugField], C.rugField],
-    [GROUND.roadQuads, C.road], [GROUND.roadEdges[0], C.roadEdge], [GROUND.roadEdges[1], C.roadEdge], [GROUND.dashes, C.dash],
-    [GROUND.bedQuads, C.bed], [GROUND.grooves[0], C.groove], [GROUND.grooves[1], C.groove],
-    [GROUND.jointBands, C.jointGap], [GROUND.pegs, C.peg],
+    [[GROUND.rugOuter], C.rugBorder, Infinity], [[GROUND.rugStripeOut], C.rugStripe, Infinity], [[GROUND.rugField], C.rugField, Infinity],
+    [GROUND.roadQuads, C.road, VIS.road], [GROUND.roadEdges[0], C.roadEdge, VIS.road], [GROUND.roadEdges[1], C.roadEdge, VIS.road], [GROUND.dashes, C.dash, VIS.road],
+    [GROUND.bedQuads, C.bed, VIS.rail], [GROUND.grooves[0], C.groove, VIS.rail], [GROUND.grooves[1], C.groove, VIS.rail],
+    [GROUND.jointBands, C.jointGap, VIS.rail], [GROUND.pegs, C.peg, VIS.rail],
   ];
-  for (const [quads, color] of layers) for (const q of quads) { const p = clipProject(q); if (p) fillPoly(ctx, p, color); }
+  for (const [quads, color, built] of layers) {
+    for (const q0 of quads) {
+      const q = builtQuad(q0, built);
+      if (!q) continue;
+      const p = clipProject(q); if (p) fillPoly(ctx, p, color);
+    }
+  }
 
   // things that stand up get depth-sorted together
   const items = [];
   const eng = pathAt(RAIL, S.eng.s), car = pathAt(ROADPATH, S.car.s);
-  items.push({ z: toCam(eng.p).z, draw: () => drawSprite(sprites.engine, eng, [[5.2, 3.4, 0.16], [3.6, 2.4, 0.22]]) });
-  items.push({ z: toCam(car.p).z, draw: () => drawSprite(sprites.car, car, [[4.2, 2.6, 0.16], [3.0, 1.9, 0.22]]) });
-  for (const c of CROSSINGS) for (const g of gateGeometry(c)) items.push(g);
+  const engAt = VIS.engineLift ? { p: v3(eng.p.x, VIS.engineLift, eng.p.z), tan: eng.tan } : eng;
+  if (VIS.engine) items.push({ z: toCam(eng.p).z, draw: () => drawSprite(sprites.engine, engAt, [[5.2, 3.4, 0.16], [3.6, 2.4, 0.22]]) });
+  if (VIS.car) items.push({ z: toCam(car.p).z, draw: () => drawSprite(sprites.car, car, [[4.2, 2.6, 0.16], [3.0, 1.9, 0.22]]) });
+  if (VIS.gate) for (const c of CROSSINGS) for (const g of gateGeometry(c)) items.push(g);
   items.sort((a, b) => b.z - a.z);
   for (const it of items) it.draw();
 
@@ -865,6 +894,7 @@ function main() {
   }
   if (clipMode) {
     clipWarmup();
+    if (Q.get('trailer') === '1') { hudOn = false; return; }   // trailer.js drives from here
     if (Q.get('clipcheck') === '1') { out.hidden = false; out.textContent = JSON.stringify(__rug.clipCheck()); render(); return; }
     const t = Q.get('t');
     if (t !== null) { clipSeek(parseFloat(t)); render(); return; }

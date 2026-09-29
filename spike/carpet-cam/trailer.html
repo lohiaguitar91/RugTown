@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Rug Town — trailer</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders:wght@800&family=Source+Serif+4:ital,wght@0,400;1,400&family=IBM+Plex+Mono:wght@400&display=block">
+<style>
+  html,body{margin:0;height:100%;background:#1a120c;overflow:hidden}
+  canvas{display:block;width:100vw;height:100vh}
+  pre{color:#eee;font:12px monospace;padding:8px}
+  /* touch the faces once so the browser fetches them before the first frame */
+  .warm{position:absolute;left:-9999px;top:0;opacity:0}
+  .a{font:800 40px "Big Shoulders"} .b{font:italic 40px "Source Serif 4"} .c{font:40px "Source Serif 4"} .d{font:40px "IBM Plex Mono"}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<pre id="out" hidden></pre>
+<div class="warm" aria-hidden="true"><span class="a">R</span><span class="b">r</span><span class="c">r</span><span class="d">r</span></div>
+<script>
+  window.onerror = function (msg, src, line, col) {
+    var out = document.getElementById('out');
+    out.hidden = false; out.textContent = 'ERROR: ' + msg + ' @' + line + ':' + col;
+    document.title = out.textContent;
+  };
+</script>
+<script src="main.js"></script>
+<script src="trailer.js"></script>
+</body>
+</html>
