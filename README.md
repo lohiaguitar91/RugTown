@@ -33,17 +33,18 @@ the carpet and watch it run. **The floor was the first open world.**
   it; `?clipcheck=1` prints the event timeline and the loop error.
   `media/rugtown-crossing.mp4` and `.gif` are rendered from it, frame by
   frame, through headless Chromium.
-- **The trailer.** `spike/carpet-cam/trailer.html?trailer=1` plays a 45-second
-  cut over the same renderer, structured on the toy's loop — build it (the
-  pieces snap onto the empty rug one by one), wind it up (pull the engine
-  back, let go), watch it run (the carpet-level cam and the crossing) — then
-  three cards and the title. `&t=<sec>` freezes a frame. The narration and
-  every toy sound come from the page's own timeline: `render-clip.mjs` with
+- **The trailer.** `spike/carpet-cam/trailer.html?trailer=1` plays a
+  43-second cut over the same renderer, structured on the toy's loop — build
+  it (the pieces snap onto the empty rug one by one), wind it up (pull the
+  engine back, let go), watch it run (the carpet-level cam and the crossing)
+  — then three cards and the title. `&t=<sec>` freezes a frame. Every toy
+  sound comes from the page's own timeline: `render-clip.mjs` with
   `TRAILER=1` captures the frames, `mix-trailer.mjs` synthesizes the clacks,
-  snaps, hush, ratchet and bell from `__trailer.events()` and lays the
-  narration (Piper TTS, voices from the rhasspy/piper GitHub releases) at
-  its cues — no sampled sounds, per DESIGN.md §3. Output:
-  `media/rugtown-trailer.mp4`.
+  snaps, hush, ratchet and bell from `__trailer.events()` — no sampled
+  sounds, per DESIGN.md §3. It ships captioned rather than narrated (TTS
+  reads came out flat); the narration cue sheet is in `trailer.js`, and
+  recorded lines dropped into `narration/line-N.wav` are mixed in at their
+  cues. Output: `media/rugtown-trailer.mp4`.
 - Sibling products: [Echolume](https://github.com/lohiaguitar91/echolume)
   (shipped; the stack this plan reuses) and
   [Lunchbox Arcade](https://github.com/lohiaguitar91/LunchboxArcade)

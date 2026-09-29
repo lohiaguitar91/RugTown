@@ -10,7 +10,7 @@
 
 'use strict';
 
-const TR = { fps: 30, total: 45.0 };
+const TR = { fps: 30, total: 42.6 };
 const FONT = {
   head: '800 96px "Big Shoulders", "Arial Narrow", sans-serif',
   title: '800 210px "Big Shoulders", "Arial Narrow", sans-serif',
@@ -23,14 +23,18 @@ const INK = { cream: '240,225,200', muted: '184,175,149', mustard: '217,158,65' 
 const ease = t => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
 const fade = (t, at, until, fin = 0.45, fout = 0.45) => Math.min(ease((t - at) / fin), ease((until - t) / fout));
 
-// ---------------------------------------------------------------- narration (Piper reads these)
+// ---------------------------------------------------------------- narration cue sheet
+//
+// The trailer ships captioned, not voiced: TTS reads of these came out flat.
+// Record them yourself as narration/line-0.wav … line-7.wav and mix-trailer.mjs
+// lays them at these cues; the captions below say the same words on screen.
 
 const NARRATION = [
   { at: 0.6, s: 'Before any of us had a console, we had a rug.' },
   { at: 3.7, s: 'The rug had roads. And the wooden track clicked together in exactly one satisfying way.' },
   { at: 9.7, s: 'Pull the engine back to wind it.' },
   { at: 13.3, s: 'Then get down on the carpet, and watch it run.' },
-  { at: 19.3, s: 'The gate drops. The car waits its turn.' },
+  { at: 18.0, s: 'The gate drops. The car waits its turn.' },
   { at: 29.5, s: "It's a toy, not a game. No timer. No score. Nothing to lose." },
   { at: 34.7, s: "Pay once, and it's yours. No ads. Ever." },
   { at: 38.8, s: 'Rug Town. A building toy, for people who remember the floor.' },
@@ -72,29 +76,35 @@ const throughGate = () => ({ pos: v3(2.5, 3.4, -6), target: v3(8, 2.3, -24) });
 
 const SHOTS = [
   { t0: 0, t1: 9.2, setup: t => buildState(t), cam: overRug, fadeIn: 0.8, texts: [
+    { s: 'Before any of us had a console, we had a rug.', at: 0.8, until: 3.4, style: 'lower' },
+    { s: 'The track clicked together in exactly one satisfying way.', at: 4.4, until: 8.9, style: 'lower', stack: 1 },
     { s: 'Build it.', at: 3.7, until: 8.9, style: 'lower' },
   ] },
   { t0: 9.2, t1: 13.0, setup: t => windState(t), cam: behindEngine, texts: [
+    { s: 'Pull the engine back. Let go.', at: 9.9, until: 12.7, style: 'lower', stack: 1 },
     { s: 'Wind it up.', at: 9.6, until: 12.7, style: 'lower' },
   ] },
   { t0: 13.0, t1: 17.8, sim: u => u * 4.8, cam: null, texts: [
+    { s: 'Then get down on the carpet.', at: 13.9, until: 17.5, style: 'lower', stack: 1 },
     { s: 'Watch it run.', at: 13.4, until: 17.5, style: 'lower' },
   ] },
-  { t0: 17.8, t1: 25.6, sim: u => 5.6 + u * 7.8, cam: tripod },
+  { t0: 17.8, t1: 25.6, sim: u => 5.6 + u * 7.8, cam: tripod, texts: [
+    { s: 'The gate drops. The car waits its turn.', at: 18.3, until: 22.6, style: 'lower' },
+  ] },
   { t0: 25.6, t1: 27.0, sim: u => 8.0 + u * 1.4, cam: bellClose },
   { t0: 27.0, t1: 29.2, sim: u => 10.25 + u * 2.2, cam: throughGate, fadeOut: 0.5 },
-  { t0: 29.2, t1: 34.4, card: true, texts: [
-    { s: 'A TOY, NOT A GAME.', at: 29.4, until: 34.2, style: 'head', y: -36 },
-    { s: 'No timer. No score. Nothing to lose.', at: 30.6, until: 34.2, style: 'body', y: 48 },
+  { t0: 29.2, t1: 33.0, card: true, texts: [
+    { s: 'A TOY, NOT A GAME.', at: 29.4, until: 32.8, style: 'head', y: -36 },
+    { s: 'No timer. No score. Nothing to lose.', at: 30.2, until: 32.8, style: 'body', y: 48 },
   ] },
-  { t0: 34.4, t1: 38.4, card: true, texts: [
-    { s: 'PAY ONCE. OWN IT.', at: 34.6, until: 38.2, style: 'head', y: -36 },
-    { s: 'No ads. No accounts. No energy meters.', at: 35.6, until: 38.2, style: 'body', y: 48 },
+  { t0: 33.0, t1: 36.4, card: true, texts: [
+    { s: 'PAY ONCE. OWN IT.', at: 33.2, until: 36.2, style: 'head', y: -36 },
+    { s: 'No ads. No accounts. No energy meters.', at: 34.0, until: 36.2, style: 'body', y: 48 },
   ] },
-  { t0: 38.4, t1: 45.0, card: true, fadeOut: 0.7, texts: [
-    { s: 'RUG TOWN', at: 38.6, until: 44.8, style: 'title', y: -20, rule: true },
-    { s: 'a building toy for people who remember the floor', at: 39.6, until: 44.8, style: 'body', y: 118 },
-    { s: 'very early prototype  ·  everything here is placeholder art drawn in code', at: 40.6, until: 44.8, style: 'mono', y: 250 },
+  { t0: 36.4, t1: 42.6, card: true, fadeOut: 0.7, texts: [
+    { s: 'RUG TOWN', at: 36.6, until: 42.4, style: 'title', y: -20, rule: true },
+    { s: 'a building toy for people who remember the floor', at: 37.5, until: 42.4, style: 'body', y: 118 },
+    { s: 'very early prototype  ·  everything here is placeholder art drawn in code', at: 38.4, until: 42.4, style: 'mono', y: 250 },
   ] },
 ];
 
@@ -146,10 +156,14 @@ function drawText(tx, t) {
 }
 
 // Put the sim, build state and camera where trailer time t says. Returns the shot.
+// Every shot starts from the clip snapshot, so a shot that drives the engine
+// by hand (the wind-up) can't leak its position into the next one.
+let lastShot = null;
 function setup(t) {
   const shot = SHOTS.find(s => t >= s.t0 && t < s.t1) || SHOTS[SHOTS.length - 1];
   const u = (t - shot.t0) / (shot.t1 - shot.t0);
   VIS.rail = Infinity; VIS.road = Infinity; VIS.gate = true; VIS.engine = true; VIS.car = true; VIS.engineLift = 0;
+  if (shot !== lastShot) { clipRestore(); lastShot = shot; }
   if (shot.card) return shot;
   if (shot.sim) clipSeek(shot.sim(u));      // also sets the clip's own camera for that time
   if (shot.setup) shot.setup(t);
@@ -172,7 +186,7 @@ function renderAt(t) {
 // build, the ratchet of the wind-up, the bell while the gate is busy.
 function events() {
   const out = [], step = 1 / 120;
-  let prevEng = null, prevRail = 0, prevRoad = 0, prevGate = false, prevActive = false, prevAngle = 0, prevPull = null;
+  let prevEng = null, prevRail = 0, prevRoad = 0, prevGate = false, prevActive = false, prevAngle = 0, prevPull = null, prevStopped = false;
   for (let t = 0; t < TR.total; t += step) {
     const shot = setup(t);
     if (shot.card) { prevEng = null; continue; }
@@ -202,6 +216,9 @@ function events() {
     }
     const near = CROSSINGS[0];
     if (shot.sim) {
+      const stopped = S.car.v < 0.05 && Math.abs(S.car.s - near.stopS) < 0.5;
+      if (stopped && !prevStopped) out.push({ t: +t.toFixed(3), kind: 'carStop' });
+      prevStopped = stopped;
       if (near.active && !prevActive) out.push({ t: +t.toFixed(3), kind: 'bellStart' });
       if (!near.active && prevActive) out.push({ t: +t.toFixed(3), kind: 'bellStop' });
       if (near.angle >= 1 && prevAngle < 1) out.push({ t: +t.toFixed(3), kind: 'gateDown' });
