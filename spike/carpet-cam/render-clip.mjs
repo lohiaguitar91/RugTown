@@ -1,13 +1,17 @@
 // Render the clip (?clip=1) — or, with TRAILER=1, the trailer — frame by frame
 // through headless Chromium over CDP, then encode with ffmpeg. Deterministic:
-// every frame is __rug.clipSeek(t) or __trailer.frame(i).
+// every frame is __rug.clipSeek(t) or __trailer.frame(i). The clip's sound is
+// rendered alongside by the toy's own synth (audio.js) through an
+// OfflineAudioContext — two loops, the last kept, so it loops seamlessly —
+// and written next to the frames as clip.wav.
 //
 //   python3 -m http.server 8741            # from the repo root, in another shell
 //   node spike/carpet-cam/render-clip.mjs /tmp/frames 30 14 1280 720
 //   TRAILER=1 node spike/carpet-cam/render-clip.mjs /tmp/trailer 30 0 1280 720
 //   (the trailer needs Google Fonts; behind a proxy set CHROME_PROXY=host:port)
-//   ffmpeg -framerate 30 -i /tmp/frames/f%04d.png -c:v libx264 -pix_fmt yuv420p \
-//          -crf 20 -movflags +faststart media/rugtown-crossing.mp4
+//   ffmpeg -framerate 30 -i /tmp/frames/f%04d.png -i /tmp/frames/clip.wav \
+//          -c:v libx264 -pix_fmt yuv420p -crf 20 -c:a aac -b:a 160k -shortest \
+//          -movflags +faststart media/rugtown-crossing.mp4
 //   ffmpeg -framerate 30 -i /tmp/frames/f%04d.png \
 //          -vf "fps=20,scale=640:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle" \
 //          -loop 0 media/rugtown-crossing.gif
@@ -69,4 +73,11 @@ for (let i = 0; i < n; i++) {
   writeFileSync(`${outDir}/f${String(i).padStart(4, '0')}.png`, Buffer.from(shot.result.data, 'base64'));
 }
 console.log(`captured ${n} frames in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+if (!TRAILER) {
+  await evaluate('window.__rug.clipSeek(0)');
+  const a = await evaluate('window.__rug.renderAudio(14, 2).then(r => { const b = r.wavBase64; delete r.wavBase64; window.__wav = b; return r; })');
+  const b64 = await evaluate('window.__wav');
+  writeFileSync(`${outDir}/clip.wav`, Buffer.from(b64, 'base64'));
+  console.log(`rendered clip.wav: peak ${a.peak}, rms ${a.rms}, events ${JSON.stringify(a.counts)}`);
+}
 ws.close(); chrome.kill();

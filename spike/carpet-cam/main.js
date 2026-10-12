@@ -19,11 +19,14 @@
 //
 // This file: layout model + track assembly, sim, cameras, renderer, harness.
 // build.js (loaded by index.html, not by the trailer): the toy bin, drag and
-// snap, pull-back, pan/zoom, sounds, the share link in the URL hash.
+// snap, pull-back, pan/zoom, the mute button, the share link in the URL hash.
+// audio.js: the synth — the sim here only says what happened (SIM_EVENTS),
+// the synth says what that sounds like, live or rendered offline.
 //
-// Keys:   C = carpet/top-down · F = cycle 8/16/32/64 sprite frames
+// Keys:   C = carpet/top-down · F = cycle 8/16/32/64 sprite frames · M = mute
 // Query:  ?s=<cm> freeze engine at rail arclength · ?frames=N · ?cam=top
-//         ?bench=<frames> · ?soak=<ticks> · ?soaklayouts=<n> (random layouts)
+//         ?bench=<frames>[&audio=1] · ?soak=<ticks> · ?soaklayouts=<n>
+//         ?notes=<sec> the tune the layout plays · ?notescheck=1 vs the fixture
 //         ?clip=1 the deterministic clip loop · ?clip=1&t=<sec> freeze a frame
 //         ?clipcheck=1 report clip periodicity/timings · #<layout> share link
 
@@ -37,7 +40,8 @@ const ROAD = { w: 7.0, x: 8, xFar: -58, zEnd: 40, corner: 12, dashLen: 3, dashGa
 const RUG = { w: 150, d: 100, corner: 12, margin: 3 };
 const CAM = { height: 5.0, follow: 30, fovY: 50 * Math.PI / 180, near: 0.6, aimUp: 3.5 };
 const RAIL_H = 1.2;   // the wooden pieces are blocks, not paint: bed top sits this far above the rug
-const ENGINE = { speedMax: 26, drainPerCm: 1 / 700, pullFull: 24 };   // full spring ≈ 3 laps of the oval
+const ENGINE = { speedMax: 26, drainPerCm: 1 / 700, pullFull: 24, stall: 0.08, axles: [2.6, -2.4], tickCm: 3.5 };   // full spring ≈ 3 laps of the oval, about a minute; below `stall` it has stopped; the axles sit fore and aft of its centre
+const NOTES = { degrees: 10, base: 4 };   // the music box: curves are pins on a two-octave pentatonic (audio.js); the barrel walk starts mid-range
 // The car runs a touch faster than the train so its wait at the gate locks its
 // phase to the train's: once it has waited once, it arrives as the gate drops
 // on every lap after — the common case, not a lucky one.
@@ -284,11 +288,24 @@ function assembleTrack(pieceIdx) {
 
 let RAIL = makePath([{ type: 'line', len: 1, from: v3(0, 0, 0), dir: v3(1, 0, 0) }]);
 let TRACKINFO = { path: RAIL, closed: false, pieces: [] };
-let JOINTS = [];
+let JOINTS = [], CLACK_JOINTS = [];
 let CROSSINGS = [];
 let PIECE_CENTER = [], TILE_CENTER = [];
 
 function trackPieceOf(idx) { return TRACKINFO.pieces.find(p => p.idx === idx) || null; }
+// Which track piece (index into TRACKINFO.pieces) an arclength falls in,
+// starting the search from a hint since the engine only ever moves a little.
+function trackPieceIndexAt(s, hint = 0) {
+  const P = TRACKINFO.pieces;
+  if (!P.length) return 0;
+  let k = Math.max(0, Math.min(P.length - 1, hint | 0));
+  for (let n = 0; n < P.length; n++) {
+    const p = P[k];
+    if (s >= p.s0 - 1e-9 && s < p.s0 + p.len - 1e-9) return k;
+    k = s < p.s0 ? (k === 0 ? P.length - 1 : k - 1) : (k + 1) % P.length;
+  }
+  return P.length - 1;   // the far buffer end
+}
 
 function roundedRect(w, d, corner, segs = 6) {
   const pts = [], hw = w / 2, hd = d / 2, r = corner;
@@ -385,7 +402,7 @@ function findCrossings() {
       const localS = pts[i].s + (pts[i + 1].s - pts[i].s) * u;
       if (out.some(x => dist2(x.p, p) < 3)) continue;
       const roadTan = pathAt(ROADPATH, roadS).tan;
-      out.push({ p, roadS, piece: idx, localS, roadTan, right: v3(roadTan.z, 0, -roadTan.x), gated: false, trackS: null, stopS: wrapS(ROADPATH, roadS - GATE.stopBefore), angle: 0, bell: 0, active: false, trainIn: Infinity });
+      out.push({ p, roadS, piece: idx, localS, roadTan, right: v3(roadTan.z, 0, -roadTan.x), gated: false, trackS: null, stopS: wrapS(ROADPATH, roadS - GATE.stopBefore), angle: 0, bell: 0, bellPhase: 0, active: false, trainIn: Infinity });
     }
   });
   out.sort((a, b) => a.roadS - b.roadS);
@@ -419,6 +436,24 @@ function rebuild(anchor = engineAnchor()) {
   JOINTS = TRACKINFO.pieces.map(p => +p.s0.toFixed(3));
   if (!TRACKINFO.closed && TRACKINFO.pieces.length) JOINTS.push(+RAIL.total.toFixed(3));
   PIECE_CENTER = TRACKINFO.pieces.map(p => pathAt(RAIL, p.s0 + p.len / 2).p);
+  // wheels clack over the joints between pieces; a buffer end is a bump, not a joint
+  CLACK_JOINTS = TRACKINFO.closed ? JOINTS.slice() : JOINTS.filter(j => j > 1e-6 && j < RAIL.total - 1e-6);
+  // the barrel: walking the chain, each curve is a pin one step up (a left
+  // turn) or down (a right turn) from the last. At either end of the scale
+  // the walk turns round — there is no lower tine, so the next turn climbs —
+  // which is what makes an oval play a phrase that falls and rises instead of
+  // fluttering on the bottom note. Pins belong to pieces, so running the
+  // train backwards plays the phrase backwards, like turning a music box
+  // the wrong way.
+  let deg = NOTES.base, bounce = 1;
+  for (const p of TRACKINFO.pieces) {
+    const pc = LAYOUT[p.idx];
+    if (pc.t !== 'C') continue;
+    const step = pc.hand * (p.forward ? 1 : -1);
+    let d = deg + step * bounce;
+    if (d < 0 || d > NOTES.degrees - 1) { bounce = -bounce; d = deg + step * bounce; }
+    deg = p.degree = d;
+  }
 
   // engine
   if (anchor && LAYOUT[anchor.piece]) {
@@ -427,12 +462,13 @@ function rebuild(anchor = engineAnchor()) {
     S.eng.s = tp.s0 + (tp.forward ? anchor.local : tp.len - anchor.local);
     S.eng.dir = tp.forward ? anchor.facing : -anchor.facing;
     S.eng.piece = anchor.piece;
+    S.eng.tpi = trackPieceIndexAt(S.eng.s, 0);
     // stopped at a buffer end that isn't one any more (the gap was filled, or
     // track was laid in front of it): it goes again, the spring is still wound
     const atEnd = !TRACKINFO.closed && ((S.eng.dir > 0 && S.eng.s >= RAIL.total - 0.01) || (S.eng.dir < 0 && S.eng.s <= 0.01));
     if (S.eng.halted && !atEnd) S.eng.halted = false;
   } else {
-    S.eng.placed = false; S.eng.s = 0; S.eng.dir = 1; S.eng.halted = false;
+    S.eng.placed = false; S.eng.s = 0; S.eng.dir = 1; S.eng.halted = false; S.eng.tpi = 0;
   }
 
   // crossings: gates on the engine's track; carry gate state across the rebuild.
@@ -445,7 +481,7 @@ function rebuild(anchor = engineAnchor()) {
     const tp = trackPieceOf(c.piece);
     if (tp && !(clipMode && gates > 0)) { c.gated = true; gates++; c.trackS = tp.s0 + (tp.forward ? c.localS : tp.len - c.localS); }
     const prev = old.find(o => dist2(o.p, c.p) < 1);
-    if (prev) { c.angle = prev.angle; c.bell = prev.bell; c.active = prev.active; }
+    if (prev) { c.angle = prev.angle; c.bell = prev.bell; c.bellPhase = prev.bellPhase || 0; c.active = prev.active; }
   }
 
   // geometry
@@ -512,14 +548,19 @@ function loadLayout(pieces, eng) {
 // ---------------------------------------------------------------- sim (fixed dt, deterministic)
 
 const S = {
-  eng: { placed: false, piece: 0, s: 0, dir: 1, spring: 1, laps: 0, halted: false, v: 0 },
+  eng: { placed: false, piece: 0, s: 0, dir: 1, spring: 1, laps: 0, halted: false, v: 0, tpi: 0, tickAcc: 0 },
   car: { s: 0, v: 0, spring: 1, loops: 0, waitTicks: 0, maxWait: 0 },
   time: 0,
 };
-const SIM_EVENTS = [];   // 'bump' when the engine reaches a buffer end; build.js plays it
+// What the sim sounded like this tick, as { kind, t: sim time, ... }: clacks,
+// notes, ticks, bells, gate thunks, the bump at a buffer end. frame() hands
+// them to the audio layer; a harness run that never drains them hits the cap.
+const SIM_EVENTS = [];
+const emit = ev => { if (SIM_EVENTS.length < 2048) SIM_EVENTS.push(ev); };
 
 function engineSpeed() {
   if (clipMode) return RAIL.total / CLIP.T;
+  if (S.eng.spring < ENGINE.stall) return 0;   // run down: stopped, not creeping forever
   return ENGINE.speedMax * S.eng.spring;   // wind-ups run down and coast to a stop (§5)
 }
 function carTargetSpeed() {
@@ -541,7 +582,7 @@ function tick() {
   let vEng = 0;
   if (e.placed && !e.halted) {
     vEng = engineSpeed();
-    const ds = vEng * dt * e.dir;
+    const ds = vEng * dt * e.dir, sPrev = e.s;
     e.s += ds;
     if (!clipMode) e.spring = Math.max(0, e.spring - Math.abs(ds) * ENGINE.drainPerCm);
     if (TRACKINFO.closed) {
@@ -550,8 +591,9 @@ function tick() {
     } else if (e.s < 0 || e.s > RAIL.total) {
       e.s = Math.max(0, Math.min(RAIL.total, e.s));
       e.halted = true; vEng = 0;
-      SIM_EVENTS.push('bump');
+      emit({ kind: 'bump', t: S.time });
     }
+    if (ds !== 0) engineSounds(sPrev, ds, vEng);
   }
   e.v = vEng;
   const moving = e.placed && !e.halted && vEng > 0.01;
@@ -569,8 +611,15 @@ function tick() {
       c.active = (moving && (c.trainIn < GATE.approachSec || (behind >= 0 && behind < GATE.clear))) || (!moving && onIt);
     } else { c.trainIn = Infinity; c.active = false; }
     const rate = c.active ? dt / GATE.dropSec : -dt / GATE.liftSec;
+    const wasAngle = c.angle;
     c.angle = Math.max(0, Math.min(1, c.angle + rate));
+    if (wasAngle < 1 && c.angle >= 1) emit({ kind: 'gateDown', t: S.time });
+    if (wasAngle > 0 && c.angle <= 0) emit({ kind: 'gateUp', t: S.time });
     c.bell = c.active ? c.bell + dt * 9 : c.bell * Math.max(0, 1 - dt * 3);
+    // the clapper strikes at each end of the swing while the gate is busy
+    const ph = Math.floor((c.bell + Math.PI / 2) / Math.PI);
+    if (c.active && ph > c.bellPhase) emit({ kind: 'bell', t: S.time });
+    c.bellPhase = ph;
   }
 
   // car: obey the gate at the next crossing ahead
@@ -608,6 +657,31 @@ function tick() {
   S.time += dt;
 }
 
+// What the engine's motion this tick sounded like: a clack for each axle that
+// rolled over a joint, the pin of the curve it just entered, the escapement's
+// tick every few centimetres. Reads the sim; never changes it.
+function engineSounds(sPrev, ds, v) {
+  const e = S.eng;
+  for (let a = 0; a < ENGINE.axles.length; a++) {
+    const p0 = sPrev + ENGINE.axles[a] * e.dir, p1 = p0 + ds;
+    const lo = Math.min(p0, p1), hi = Math.max(p0, p1);
+    for (const J of CLACK_JOINTS) {
+      let hit = false;
+      if (TRACKINFO.closed) { for (let k = -1; k <= 1 && !hit; k++) { const j = J + k * RAIL.total; hit = j > lo && j <= hi; } }
+      else hit = J > lo && J <= hi;
+      if (hit) { emit({ kind: 'clack', t: S.time, v, axle: a }); break; }
+    }
+  }
+  const k = trackPieceIndexAt(e.s, e.tpi);
+  if (k !== e.tpi) {
+    const tp = TRACKINFO.pieces[k];
+    if (tp && tp.degree !== undefined) emit({ kind: 'note', t: S.time, degree: tp.degree, piece: tp.idx });
+    e.tpi = k;
+  }
+  e.tickAcc += Math.abs(ds);
+  if (e.tickAcc >= ENGINE.tickCm) { e.tickAcc -= ENGINE.tickCm; emit({ kind: 'tick', t: S.time, amp: 0.35 + 0.65 * e.spring }); }
+}
+
 const rewindEngine = () => { S.eng.spring = 1; S.eng.halted = false; };
 const rewindCar = () => { S.car.spring = 1; };
 
@@ -617,6 +691,7 @@ function engineSlideTo(s) {
   const e = S.eng;
   e.s = TRACKINFO.closed ? wrapS(RAIL, s) : Math.max(0, Math.min(RAIL.total, s));
   e.halted = true; e.v = 0;
+  e.tpi = trackPieceIndexAt(e.s, e.tpi);   // a slide isn't a run: no pins strike for the pieces it skipped
 }
 function engineRelease(pulled) {
   const e = S.eng;
@@ -1176,6 +1251,7 @@ function resize() {
   bakeScreenLayers();
 }
 
+let AUDIO = null;   // RugAudio.live(), when audio.js is loaded and this isn't a render
 let acc = 0, lastT = null, frameMs = 0;
 let clipTick = 0;                                   // integer ticks since clip t=0 — no float drift
 const CLIP_TICKS = Math.round(CLIP.T / FIXED_DT);
@@ -1191,6 +1267,7 @@ function frame(t) {
     tick(); acc -= FIXED_DT;
     if (clipMode) { clipTick++; if (clipTick >= CLIP_TICKS) clipSeek(0); }
   }
+  if (AUDIO) { AUDIO.pump(SIM_EVENTS, S.time); AUDIO.hush(S.car.v); } else SIM_EVENTS.length = 0;
   if (clipMode) clipCamera(clipT()); else if (S.eng.placed) updateCamera(dt, false);
   const t0 = performance.now();
   render();
@@ -1202,12 +1279,24 @@ function frame(t) {
 function advanceTo(s) {
   s = isFinite(s) ? wrapS(RAIL, s) : 0;
   for (let i = 0; i < 200000 && S.eng.s < s - 1e-6 && S.eng.laps === 0 && !S.eng.halted; i++) tick();
+  SIM_EVENTS.length = 0;
   updateCamera(0, true);
 }
 
 // --- clip mode: warm the sim up until the car has locked its phase to the
 // train, then define t=0 as the engine passing CLIP.s0. Seeking restores the
 // snapshot and re-ticks, so every frame is a pure function of t.
+// The whole sim state as a string (engine, car, clock, every gate), so a run
+// can be replayed from here or undone after a headless look ahead.
+function snapshotSim() {
+  return JSON.stringify({ S, gates: CROSSINGS.map(c => ({ angle: c.angle, bell: c.bell, bellPhase: c.bellPhase, active: c.active, trainIn: c.trainIn === Infinity ? null : c.trainIn })) });
+}
+function restoreSim(snap) {
+  const s = JSON.parse(snap);
+  Object.assign(S.eng, s.S.eng); Object.assign(S.car, s.S.car); S.time = s.S.time;
+  s.gates.forEach((g, i) => { if (CROSSINGS[i]) Object.assign(CROSSINGS[i], g, { trainIn: g.trainIn === null ? Infinity : g.trainIn }); });
+  SIM_EVENTS.length = 0;
+}
 let clipSnapshot = null;
 function clipWarmup() {
   // start the car past the far crossing: both gates are stable places for it
@@ -1215,13 +1304,12 @@ function clipWarmup() {
   S.car.s = 60; S.car.v = 0;
   let prev = S.eng.s;
   while (!(S.eng.laps >= CLIP.warmLaps && prev < CLIP.s0 && S.eng.s >= CLIP.s0)) { prev = S.eng.s; tick(); }
-  clipSnapshot = JSON.stringify({ S, gates: CROSSINGS.map(c => ({ angle: c.angle, bell: c.bell, active: c.active, trainIn: c.trainIn === Infinity ? null : c.trainIn })) });
+  clipSnapshot = snapshotSim();
+  SIM_EVENTS.length = 0;   // the warm laps made plenty of noise nobody will hear
   clipTick = 0;
 }
 function clipRestore() {
-  const snap = JSON.parse(clipSnapshot);
-  Object.assign(S.eng, snap.S.eng); Object.assign(S.car, snap.S.car); S.time = snap.S.time;
-  snap.gates.forEach((g, i) => Object.assign(CROSSINGS[i], g, { trainIn: g.trainIn === null ? Infinity : g.trainIn }));
+  restoreSim(clipSnapshot);
   clipTick = 0;
 }
 // Seek to clip time t (wrapped into the loop). Pure function of t.
@@ -1317,9 +1405,70 @@ const __rug = {
   },
   bench(nFrames) {
     nFrames = Math.max(1, nFrames | 0);
+    SIM_EVENTS.length = 0;
     const t0 = performance.now();
-    for (let i = 0; i < nFrames; i++) { tick(); if (S.eng.placed) updateCamera(FIXED_DT, false); render(); }
-    return { frames: nFrames, msPerFrame: +((performance.now() - t0) / nFrames).toFixed(3), spriteFrames: sprites.engine.length, viewport: `${W}x${H}@${dpr}` };
+    for (let i = 0; i < nFrames; i++) {
+      tick();
+      if (AUDIO) { AUDIO.pump(SIM_EVENTS, S.time); AUDIO.hush(S.car.v); } else SIM_EVENTS.length = 0;
+      if (S.eng.placed) updateCamera(FIXED_DT, false); render();
+    }
+    return { frames: nFrames, msPerFrame: +((performance.now() - t0) / nFrames).toFixed(3), spriteFrames: sprites.engine.length, viewport: `${W}x${H}@${dpr}`, audio: AUDIO ? AUDIO.state() : 'off' };
+  },
+  // The tune the layout plays: run the sim `seconds` ahead headlessly from the
+  // current state, log every pin struck (and count the rest), then put the
+  // sim back exactly. No AudioContext involved — this is the fixture.
+  notes(seconds = 30) {
+    const snap = snapshotSim(), t0 = S.time, notes = [], counts = {};
+    SIM_EVENTS.length = 0;
+    for (let i = 0, n = Math.round(seconds / FIXED_DT); i < n; i++) {
+      tick();
+      for (const ev of SIM_EVENTS) {
+        counts[ev.kind] = (counts[ev.kind] || 0) + 1;
+        if (ev.kind === 'note') notes.push({ t: +(ev.t - t0).toFixed(3), d: ev.degree, hz: window.RugAudio ? +window.RugAudio.freqOf(ev.degree).toFixed(1) : null, piece: ev.piece });
+      }
+      SIM_EVENTS.length = 0;
+    }
+    restoreSim(snap);
+    return { layout: serializeLayout(), seconds, notes, counts };
+  },
+  // What the toy sounds like over the next `seconds`, rendered offline through
+  // the same synth: a 16-bit stereo 44.1 kHz WAV as base64. With loops > 1 the
+  // sim runs on for that many loops and the last one is kept, so the tails of
+  // one lap ring into the start of the next and the clip loops without a seam.
+  async renderAudio(seconds = CLIP.T, loops = 1) {
+    if (!window.RugAudio || typeof OfflineAudioContext === 'undefined') throw new Error('audio.js or OfflineAudioContext missing');
+    const snap = snapshotSim(), ct = clipTick, t0 = S.time, events = [], hush = [];
+    SIM_EVENTS.length = 0;
+    const total = seconds * loops;
+    for (let i = 0, n = Math.round(total / FIXED_DT); i < n; i++) {
+      tick();
+      for (const ev of SIM_EVENTS) events.push({ ...ev, t: ev.t - t0 });
+      SIM_EVENTS.length = 0;
+      if (i % 4 === 0) hush.push({ t: S.time - t0, v: S.car.v });
+    }
+    restoreSim(snap); clipTick = ct;
+    const SR = 44100, ctx = new OfflineAudioContext(2, Math.ceil(SR * total) + 1, SR);
+    const syn = window.RugAudio.synth(ctx);
+    for (const ev of events) syn.event(ev, ev.t);
+    for (const h of hush) syn.hush(h.t, h.v);
+    const buf = await ctx.startRendering();
+    const off = Math.round(SR * seconds * (loops - 1)), len = Math.round(SR * seconds);
+    const L = buf.getChannelData(0), R = buf.numberOfChannels > 1 ? buf.getChannelData(1) : L;
+    const bytes = new Uint8Array(44 + len * 4), dv = new DataView(bytes.buffer);
+    const str = (o, v) => { for (let i = 0; i < v.length; i++) bytes[o + i] = v.charCodeAt(i); };
+    str(0, 'RIFF'); dv.setUint32(4, 36 + len * 4, true); str(8, 'WAVE'); str(12, 'fmt '); dv.setUint32(16, 16, true);
+    dv.setUint16(20, 1, true); dv.setUint16(22, 2, true); dv.setUint32(24, SR, true); dv.setUint32(28, SR * 4, true);
+    dv.setUint16(32, 4, true); dv.setUint16(34, 16, true); str(36, 'data'); dv.setUint32(40, len * 4, true);
+    let peak = 0, sq = 0;
+    for (let i = 0; i < len; i++) {
+      const l = Math.max(-1, Math.min(1, L[off + i])), r = Math.max(-1, Math.min(1, R[off + i]));
+      peak = Math.max(peak, Math.abs(l), Math.abs(r)); sq += l * l;
+      dv.setInt16(44 + i * 4, Math.round(l * 32767), true); dv.setInt16(46 + i * 4, Math.round(r * 32767), true);
+    }
+    let b64 = ''; const CH = 0x8000;
+    for (let i = 0; i < bytes.length; i += CH) b64 += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+    const counts = {}; for (const ev of events) if (ev.t >= seconds * (loops - 1)) counts[ev.kind] = (counts[ev.kind] || 0) + 1;
+    return { seconds, loops, counts, peak: +peak.toFixed(3), rms: +Math.sqrt(sq / len).toFixed(4), wavBase64: btoa(b64) };
   },
   // Clip periodicity + event timeline: when the near gate drops, when the car
   // reaches its stop line, when the engine crosses, when the gate is fully up.
@@ -1346,12 +1495,32 @@ const __rug = {
     clipSeek(0);
     return { T: CLIP.T, loopErrorCm: { engine: +dEng.toFixed(2), car: +dCar.toFixed(2) }, start, end, events: ev };
   },
-  clipSeek(t) { clipSeek(t); render(); return { t: clipT(), engS: +S.eng.s.toFixed(2), carS: +S.car.s.toFixed(2) }; },
+  clipSeek(t) { clipSeek(t); SIM_EVENTS.length = 0; render(); return { t: clipT(), engS: +S.eng.s.toFixed(2), carS: +S.car.s.toFixed(2) }; },
   hud(on) { hudOn = !!on; },
   layout: () => ({ pieces: LAYOUT.length, closed: TRACKINFO.closed, trackCm: +RAIL.total.toFixed(1), crossings: CROSSINGS.map(c => ({ gated: c.gated, roadS: +c.roadS.toFixed(1) })), hash: serializeLayout(), hashBytes: serializeLayout().length, openEnds: openEnds().length }),
   stats: () => ({ eng: S.eng, car: S.car, frameMs, sprites: sprites.engine.length }),
 };
 window.__rug = __rug;
+
+// The oval's tune against the checked-in fixture: same pins, same times.
+async function notesCheck(out) {
+  out.hidden = false;
+  loadLayout(defaultLayout(), { piece: 0, local: 0, facing: 1 });
+  try {
+    const fx = await (await fetch('fixtures/oval-notes.json')).json();
+    const now = __rug.notes(fx.seconds), diffs = [];
+    if (now.layout !== fx.layout) diffs.push('layout differs from the fixture');
+    if (now.notes.length !== fx.notes.length) diffs.push(`${now.notes.length} notes, fixture has ${fx.notes.length}`);
+    for (let i = 0; i < Math.min(now.notes.length, fx.notes.length) && diffs.length < 8; i++) {
+      const a = now.notes[i], b = fx.notes[i];
+      if (a.d !== b.d || Math.abs(a.t - b.t) > 0.002) diffs.push(`note ${i}: d${a.d} at ${a.t}s, fixture d${b.d} at ${b.t}s`);
+    }
+    for (const k of Object.keys(fx.counts)) if (now.counts[k] !== fx.counts[k]) diffs.push(`${k}: ${now.counts[k] || 0}, fixture ${fx.counts[k]}`);
+    window.__notesCheck = { ok: !diffs.length, notes: now.notes.length, diffs };
+  } catch (e) { window.__notesCheck = { ok: false, diffs: [String(e)] }; }
+  out.textContent = JSON.stringify(window.__notesCheck);
+  render();
+}
 
 function main() {
   canvas = document.getElementById('c');
@@ -1359,6 +1528,7 @@ function main() {
   resize();
   window.addEventListener('resize', resize);
   bakeAll(spriteFrames);
+  if (window.RugAudio && !clipMode) AUDIO = window.RugAudio.live();
 
   // the layout: the share link if there is one, else the oval
   let fromHash = null;
@@ -1369,6 +1539,7 @@ function main() {
   window.addEventListener('keydown', e => {
     const key = e.key.toLowerCase();
     if (key === 'c') cam.topDown = !cam.topDown;
+    if (key === 'm' && AUDIO) { AUDIO.unlock(); AUDIO.toggle(); }
     if (key === 'f') {
       const i = FRAME_CHOICES.indexOf(sprites.engine.length);
       bakeAll(FRAME_CHOICES[(i + 1) % FRAME_CHOICES.length]);
@@ -1378,7 +1549,13 @@ function main() {
   const out = document.getElementById('out');
   if (Q.get('cam') === 'top') { cam.topDown = true; fitTop(); }
   if (Q.get('hud') === '0') hudOn = false;
-  const freezeS = Q.get('s'), bench = Q.get('bench'), soak = Q.get('soak'), soakLayouts = Q.get('soaklayouts');
+  const freezeS = Q.get('s'), bench = Q.get('bench'), soak = Q.get('soak'), soakLayouts = Q.get('soaklayouts'), notesSec = Q.get('notes');
+  if (notesSec !== null) {
+    out.hidden = false; out.textContent = JSON.stringify(__rug.notes(parseFloat(notesSec) || 30));
+    advanceTo(0); render();
+    return;
+  }
+  if (Q.get('notescheck') === '1') { notesCheck(out); return; }
   if (soakLayouts) {
     out.hidden = false; out.textContent = JSON.stringify(__rug.soakLayouts(parseInt(soakLayouts, 10) || 1, parseFloat(Q.get('secs')) || 30));
     advanceTo(0); render();
@@ -1390,6 +1567,7 @@ function main() {
     return;
   }
   if (bench) {
+    if (Q.get('audio') === '1' && AUDIO) { AUDIO.unlock(); AUDIO.forceReady(true); }   // headless: no gesture, schedule anyway
     updateCamera(0, true);
     out.hidden = false; out.textContent = JSON.stringify(__rug.bench(parseInt(bench, 10)));
     return;

@@ -13,40 +13,24 @@
 //   one finger on the rug             pan · two fingers: pinch to zoom
 //   wheel                             zoom (the web demo)
 //   the round button                  carpet level ⇄ builder
+//   the small button under it       sound on / off
 // At carpet level, tapping the engine or the car winds it (the old behaviour).
 
 'use strict';
 
 window.__buildInit = function buildInit() {
 
-  // ---------------------------------------------------------------- sounds (synthesized, like everything else)
+  // ---------------------------------------------------------------- sounds
 
-  const SFX = (() => {
-    let ac = null;
-    const ctxOk = () => { if (!ac && window.AudioContext) { try { ac = new AudioContext(); } catch {} } if (ac && ac.state === 'suspended') ac.resume().catch(() => {}); return !!ac; };
-    const noise = (dur, amp, decay, lp) => {
-      if (!ctxOk()) return;
-      const n = Math.floor(dur * ac.sampleRate), buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
-      let y = 0;
-      for (let i = 0; i < n; i++) { const x = Math.random() * 2 - 1; y += lp * (x - y); d[i] = y * amp * Math.exp(-(i / ac.sampleRate) * decay); }
-      const src = ac.createBufferSource(); src.buffer = buf; src.connect(ac.destination); src.start();
-    };
-    const tone = (freq, dur, amp, decay) => {
-      if (!ctxOk()) return;
-      const o = ac.createOscillator(), g = ac.createGain();
-      o.frequency.value = freq; o.type = 'sine';
-      g.gain.setValueAtTime(amp, ac.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + Math.max(0.02, Math.min(dur, 4 / decay)));
-      o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + dur);
-    };
-    return {
-      unlock: () => ctxOk(),
-      snap: () => { noise(0.03, 0.5, 90, 0.5); tone(820 + Math.random() * 120, 0.09, 0.22, 40); tone(240, 0.08, 0.15, 40); },
-      bump: () => { tone(110, 0.14, 0.3, 22); noise(0.05, 0.2, 70, 0.2); },
-      ratchet: () => { noise(0.012, 0.3, 200, 0.6); tone(1500 + Math.random() * 200, 0.03, 0.12, 120); },
-      release: () => { noise(0.4, 0.25, 6, 0.25); },
-      nope: () => { tone(160, 0.08, 0.12, 50); },
-    };
-  })();
+  // The build sounds come from the shared synth (audio.js) through the toy's
+  // live audio, which main.js owns; nothing here plays if there is none.
+  const SFX = {
+    unlock: () => { if (AUDIO) AUDIO.unlock(); },
+    snap: () => { if (AUDIO) AUDIO.ui('snap'); },
+    ratchet: () => { if (AUDIO) AUDIO.ui('ratchet'); },
+    release: () => { if (AUDIO) AUDIO.ui('release'); },
+    nope: () => { if (AUDIO) AUDIO.ui('nope'); },
+  };
 
   // ---------------------------------------------------------------- the bin and the buttons (screen space)
 
@@ -74,6 +58,8 @@ window.__buildInit = function buildInit() {
     return { x: SAFE.left + PAD, y: y0 + i * (SLOT + 14), w: SLOT, h: SLOT };
   };
   const camBtn = () => ({ x: W - SAFE.right - 14 - 52, y: SAFE.top + 14, r: 26 });
+  const muteBtn = () => ({ x: W - SAFE.right - 14 - 52, y: SAFE.top + 14 + 52 + 10, r: 26 });   // under the camera button
+  const inBtn = (p, b) => Math.hypot(p.x - (b.x + b.r), p.y - (b.y + b.r)) <= b.r + 8;
   const inRect = (p, r) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
   const buildRect = () => {   // the screen area the rug should fit into
     const b = binRectUI();
@@ -121,14 +107,28 @@ window.__buildInit = function buildInit() {
     ctx.textAlign = 'left';
   }
 
-  function drawCamButton() {
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const b = camBtn(), cx = b.x + b.r, cy = b.y + b.r;
+  function roundButton(b) {
+    const cx = b.x + b.r, cy = b.y + b.r;
     ctx.beginPath(); ctx.arc(cx, cy, b.r, 0, 6.29); ctx.fillStyle = 'rgba(46,32,23,0.9)'; ctx.fill();
     ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(217,158,65,0.9)'; ctx.stroke();
+    return { cx, cy };
+  }
+  function drawButtons() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const { cx, cy } = roundButton(camBtn());
     ctx.font = '10px ui-monospace, monospace'; ctx.fillStyle = 'rgba(240,225,200,0.9)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(cam.topDown ? 'carpet' : 'build', cx, cy);
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    if (!AUDIO) return;
+    // the mute toggle: a little speaker, crossed out while the toy is quiet
+    const m = roundButton(muteBtn()), muted = AUDIO.muted;
+    ctx.fillStyle = ctx.strokeStyle = muted ? 'rgba(240,225,200,0.45)' : 'rgba(240,225,200,0.9)';
+    ctx.beginPath(); ctx.moveTo(m.cx - 10, m.cy - 4); ctx.lineTo(m.cx - 5, m.cy - 4); ctx.lineTo(m.cx + 1, m.cy - 9); ctx.lineTo(m.cx + 1, m.cy + 9);
+    ctx.lineTo(m.cx - 5, m.cy + 4); ctx.lineTo(m.cx - 10, m.cy + 4); ctx.closePath(); ctx.fill();
+    ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+    if (muted) { ctx.beginPath(); ctx.moveTo(m.cx + 5, m.cy - 4); ctx.lineTo(m.cx + 12, m.cy + 4); ctx.moveTo(m.cx + 12, m.cy - 4); ctx.lineTo(m.cx + 5, m.cy + 4); ctx.stroke(); }
+    else { ctx.beginPath(); ctx.arc(m.cx + 2, m.cy, 6, -0.95, 0.95); ctx.stroke(); ctx.beginPath(); ctx.arc(m.cx + 2, m.cy, 10.5, -0.95, 0.95); ctx.stroke(); }
+    ctx.lineCap = 'butt';
   }
 
   // ---------------------------------------------------------------- the ghost (a piece or the engine in hand)
@@ -233,8 +233,8 @@ window.__buildInit = function buildInit() {
       return;
     }
     if (pointers.size > 1) return;
-    const btn = camBtn();
-    if (Math.hypot(p.x - (btn.x + btn.r), p.y - (btn.y + btn.r)) <= btn.r + 8) { drag = { kind: 'button' }; return; }
+    if (inBtn(p, camBtn())) { drag = { kind: 'button', which: 'cam' }; return; }
+    if (AUDIO && inBtn(p, muteBtn())) { drag = { kind: 'button', which: 'mute' }; return; }
     if (!cam.topDown) {
       // carpet level: a tap winds whichever toy is under it (or the engine)
       const c = carScreen(), e = engineScreen();
@@ -351,7 +351,7 @@ window.__buildInit = function buildInit() {
     if (!drag) return;
     if (drag.kind === 'pinch') { if (pointers.size < 2) { drag = null; lastPinch = null; } return; }
     const tapLike = had && Math.hypot(p.x - had.start.x, p.y - had.start.y) < 10 && performance.now() - had.t0 < 450;
-    if (drag.kind === 'button') { if (tapLike) toggleCamera(); drag = null; return; }
+    if (drag.kind === 'button') { if (tapLike) { if (drag.which === 'mute') AUDIO.toggle(); else toggleCamera(); } drag = null; return; }
     if (drag.kind === 'maybe') { if (tapLike) tapPiece(drag.idx); drag = null; return; }
     if (drag.kind === 'piece') { dropPiece(); return; }
     if (drag.kind === 'engineNew' || (drag.kind === 'engine' && drag.lifted)) { dropEngine(); return; }
@@ -483,9 +483,7 @@ window.__buildInit = function buildInit() {
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   window.addEventListener('keydown', e => { if (e.key.toLowerCase() === 'c') { cam.topDown = !cam.topDown; toggleCamera(); } });
 
-  RENDER_HOOKS.push(drawGhost, drawToyBin, drawCamButton);
-  const pump = () => { while (SIM_EVENTS.length) { if (SIM_EVENTS.shift() === 'bump') SFX.bump(); } requestAnimationFrame(pump); };
-  requestAnimationFrame(pump);
+  RENDER_HOOKS.push(drawGhost, drawToyBin, drawButtons);
 
   cam.topDown = Q.get('cam') !== 'carpet';
   if (cam.topDown) fitTop(buildRect());
@@ -504,6 +502,9 @@ window.__buildInit = function buildInit() {
     ghost: () => drag && drag.kind === 'piece' ? { valid: drag.ghost?.valid, snapped: drag.ghost?.snapped, hand: drag.hand } : drag ? { kind: drag.kind, snap: !!drag.snap } : null,
     state: () => ({ pieces: LAYOUT.length, closed: TRACKINFO.closed, open: openEnds().length, engine: { placed: S.eng.placed, s: +S.eng.s.toFixed(2), dir: S.eng.dir, spring: +S.eng.spring.toFixed(2), halted: S.eng.halted }, crossings: CROSSINGS.map(c => c.gated), top: { ...TOP }, hash: serializeLayout() }),
     fit: () => fitTop(buildRect()), setTop: (cx, cz, h) => { TOP.cx = cx; TOP.cz = cz; TOP.h = h; },
+    mute: b => { if (AUDIO) AUDIO.setMuted(b); return AUDIO ? AUDIO.muted : null; },
+    muteScreen: () => { const b = muteBtn(); return { x: b.x + b.r, y: b.y + b.r }; },
+    audio: () => AUDIO ? { muted: AUDIO.muted, state: AUDIO.state() } : null,
     render: () => { render(); return true; },
     tickSeconds: s => { for (let i = 0; i < Math.round(s / FIXED_DT); i++) tick(); },
   };
