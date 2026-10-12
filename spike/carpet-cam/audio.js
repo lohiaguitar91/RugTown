@@ -55,7 +55,7 @@
     };
 
     // a filtered noise burst with an exponential tail
-    const burst = (t, dur, amp, lp, { hp = 0, rate = 1 } = {}) => {
+    const burst = (t, dur, amp, lp, { hp = 0, rate = 1, dest = master } = {}) => {
       const src = ac.createBufferSource(); src.buffer = noiseBuf; src.playbackRate.value = rate;
       const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp; f.Q.value = 0.7;
       const g = ac.createGain();
@@ -63,7 +63,7 @@
       g.gain.exponentialRampToValueAtTime(0.0005, t + dur);
       let tail = f;
       if (hp) { const h = ac.createBiquadFilter(); h.type = 'highpass'; h.frequency.value = hp; f.connect(h); tail = h; }
-      src.connect(f); tail.connect(g); g.connect(master);
+      src.connect(f); tail.connect(g); g.connect(dest);
       src.start(t, rnd() * (noiseBuf.duration - dur - 0.05)); src.stop(t + dur + 0.02);
       return g;
     };
@@ -123,11 +123,12 @@
     const ratchet = t => { burst(t, 0.012, 0.25, 4000, { hp: 800 }); ping(t, 1500 + rnd() * 200, 0.03, 0.1); };
     // the spring letting go: a fluttering whirr that runs down
     const release = t => {
-      const g = burst(t, 0.5, 0.24, 1400, { hp: 200 });
+      const trem = ac.createGain(); trem.gain.setValueAtTime(0.6, t); trem.connect(master);   // 0.6 ± 0.4, a flutter under the envelope
       const lfo = ac.createOscillator(); lfo.type = 'sine';
       lfo.frequency.setValueAtTime(34, t); lfo.frequency.linearRampToValueAtTime(5, t + 0.5);
-      const depth = ac.createGain(); depth.gain.value = 0.5;
-      lfo.connect(depth); depth.connect(g.gain); lfo.start(t); lfo.stop(t + 0.55);
+      const depth = ac.createGain(); depth.gain.value = 0.4;
+      lfo.connect(depth); depth.connect(trem.gain); lfo.start(t); lfo.stop(t + 0.55);
+      burst(t, 0.5, 0.24, 1400, { hp: 200, dest: trem });
     };
     const nope = t => ping(t, 160, 0.08, 0.1);
 
@@ -180,16 +181,17 @@
       ready,
       state: () => ac ? ac.state : 'none',
       // immediate UI sounds (snap, nope, ratchet, release)
-      ui(kind) { if (!ready() || !syn[kind]) return; syn[kind](ac.currentTime + 0.005); },
-      // sim events carry their sim time; map onto audio time keeping their spacing
+      ui(kind) { if (!ready() || !syn[kind]) return; try { syn[kind](ac.currentTime + 0.005); } catch {} },
+      // sim events carry their sim time; map onto audio time keeping their
+      // spacing. Sound is never allowed to take the frame loop down with it.
       pump(events, simNow) {
         if (!events.length) return;
         if (!ready() || document.hidden) { events.length = 0; return; }
         const now = ac.currentTime;
-        for (const ev of events) syn.event(ev, Math.max(now, now + LOOK - (simNow - ev.t)));
+        try { for (const ev of events) syn.event(ev, Math.max(now, now + LOOK - (simNow - ev.t))); } catch {}
         events.length = 0;
       },
-      hush(v) { if (ready()) syn.hush(ac.currentTime, v); },
+      hush(v) { if (!ready()) return; try { syn.hush(ac.currentTime, v); } catch {} },
       // the harness: schedule even on a context that can't run (no gesture), to measure the cost
       forceReady(on) { force = !!on; },
     };

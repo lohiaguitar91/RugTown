@@ -75,7 +75,7 @@ for (let i = 0; i < n; i++) {
 console.log(`captured ${n} frames in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 if (!TRAILER) {
   await evaluate('window.__rug.clipSeek(0)');
-  const a = await evaluate('window.__rug.renderAudio(14, 2).then(r => { const b = r.wavBase64; delete r.wavBase64; window.__wav = b; return r; })');
+  const a = await evaluate(`window.__rug.renderAudio(${T}, 2).then(r => { const b = r.wavBase64; delete r.wavBase64; window.__wav = b; return r; })`);
   const b64 = await evaluate('window.__wav');
   writeFileSync(`${outDir}/clip.wav`, Buffer.from(b64, 'base64'));
   console.log(`rendered clip.wav: peak ${a.peak}, rms ${a.rms}, events ${JSON.stringify(a.counts)}`);

@@ -440,16 +440,21 @@ function rebuild(anchor = engineAnchor()) {
   CLACK_JOINTS = TRACKINFO.closed ? JOINTS.slice() : JOINTS.filter(j => j > 1e-6 && j < RAIL.total - 1e-6);
   // the barrel: walking the chain, each curve is a pin one step up (a left
   // turn) or down (a right turn) from the last. At either end of the scale
-  // the walk turns round — there is no lower tine, so the next turn climbs —
-  // which is what makes an oval play a phrase that falls and rises instead of
-  // fluttering on the bottom note. Pins belong to pieces, so running the
-  // train backwards plays the phrase backwards, like turning a music box
-  // the wrong way.
+  // the walk turns round — there is no lower tine, so from there the same
+  // hand climbs until the next end — which is what makes an oval play a
+  // phrase that falls and rises instead of fluttering on the bottom note.
+  // Pins belong to pieces, so running the train backwards plays the phrase
+  // backwards, like turning a music box the wrong way. The walk itself must
+  // not depend on which piece the engine happens to be on (that decides the
+  // chain's orientation): a closed loop always starts at its lowest piece,
+  // an open line is walked from whichever end has the lower piece index.
+  const P = TRACKINFO.pieces;
+  const rev = !TRACKINFO.closed && P.length > 1 && P[0].idx > P[P.length - 1].idx;
   let deg = NOTES.base, bounce = 1;
-  for (const p of TRACKINFO.pieces) {
-    const pc = LAYOUT[p.idx];
+  for (let i = 0; i < P.length; i++) {
+    const p = P[rev ? P.length - 1 - i : i], pc = LAYOUT[p.idx];
     if (pc.t !== 'C') continue;
-    const step = pc.hand * (p.forward ? 1 : -1);
+    const step = pc.hand * (p.forward ? 1 : -1) * (rev ? -1 : 1);
     let d = deg + step * bounce;
     if (d < 0 || d > NOTES.degrees - 1) { bounce = -bounce; d = deg + step * bounce; }
     deg = p.degree = d;
@@ -615,10 +620,14 @@ function tick() {
     c.angle = Math.max(0, Math.min(1, c.angle + rate));
     if (wasAngle < 1 && c.angle >= 1) emit({ kind: 'gateDown', t: S.time });
     if (wasAngle > 0 && c.angle <= 0) emit({ kind: 'gateUp', t: S.time });
-    c.bell = c.active ? c.bell + dt * 9 : c.bell * Math.max(0, 1 - dt * 3);
-    // the clapper strikes at each end of the swing while the gate is busy
+    // the bell swings, and the clapper strikes at each end of the swing, while
+    // the gate is busy with a train that is going somewhere; a train parked on
+    // the crossing (run down, or halted at a buffer end) keeps the gate down
+    // but the bell falls quiet — wind it up and the road reopens
+    const ringing = c.active && (moving || c.angle < 1);
+    c.bell = ringing ? c.bell + dt * 9 : c.bell * Math.max(0, 1 - dt * 3);
     const ph = Math.floor((c.bell + Math.PI / 2) / Math.PI);
-    if (c.active && ph > c.bellPhase) emit({ kind: 'bell', t: S.time });
+    if (ringing && ph > c.bellPhase) emit({ kind: 'bell', t: S.time });
     c.bellPhase = ph;
   }
 
@@ -697,7 +706,7 @@ function engineRelease(pulled) {
   const e = S.eng;
   if (Math.abs(pulled) < 1) { rewindEngine(); return; }   // a tap: full wind, same direction
   if (pulled > 0) e.dir = -e.dir;   // dragged nose-first: it runs back the other way
-  e.spring = Math.min(1, Math.abs(pulled) / ENGINE.pullFull);
+  e.spring = Math.max(ENGINE.stall * 1.5, Math.min(1, Math.abs(pulled) / ENGINE.pullFull));   // the smallest pull still goes somewhere
   e.halted = false;
 }
 // Drop the engine onto a track point of any chain; it faces `facing` along
@@ -1232,7 +1241,7 @@ function drawHud() {
   ctx.font = '12px ui-monospace, monospace';
   ctx.fillStyle = 'rgba(240,225,200,0.75)';
   const bar8 = v => '▓'.repeat(Math.round(v * 8)).padEnd(8, '░');
-  const eng = S.eng.placed ? `engine ${bar8(S.eng.spring)}${S.eng.halted ? ' ·' : ''}` : 'engine in the bin';
+  const eng = S.eng.placed ? `engine ${bar8(S.eng.spring)}${S.eng.halted || engineSpeed() === 0 ? ' ·' : ''}` : 'engine in the bin';
   ctx.fillText(`${eng}  car ${bar8(S.car.spring)}  ${fpsAvg ? fpsAvg.toFixed(0) + 'fps' : ''}`, 12, 20);
   ctx.fillStyle = 'rgba(240,225,200,0.45)';
   const narrow = W < 640;   // keep clear of the camera button on a phone
@@ -1515,7 +1524,7 @@ async function notesCheck(out) {
       const a = now.notes[i], b = fx.notes[i];
       if (a.d !== b.d || Math.abs(a.t - b.t) > 0.002) diffs.push(`note ${i}: d${a.d} at ${a.t}s, fixture d${b.d} at ${b.t}s`);
     }
-    for (const k of Object.keys(fx.counts)) if (now.counts[k] !== fx.counts[k]) diffs.push(`${k}: ${now.counts[k] || 0}, fixture ${fx.counts[k]}`);
+    for (const k of new Set([...Object.keys(fx.counts), ...Object.keys(now.counts)])) if ((now.counts[k] || 0) !== (fx.counts[k] || 0)) diffs.push(`${k}: ${now.counts[k] || 0}, fixture ${fx.counts[k] || 0}`);
     window.__notesCheck = { ok: !diffs.length, notes: now.notes.length, diffs };
   } catch (e) { window.__notesCheck = { ok: false, diffs: [String(e)] }; }
   out.textContent = JSON.stringify(window.__notesCheck);

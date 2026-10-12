@@ -59,7 +59,6 @@ window.__buildInit = function buildInit() {
   };
   const camBtn = () => ({ x: W - SAFE.right - 14 - 52, y: SAFE.top + 14, r: 26 });
   const muteBtn = () => ({ x: W - SAFE.right - 14 - 52, y: SAFE.top + 14 + 52 + 10, r: 26 });   // under the camera button
-  const inBtn = (p, b) => Math.hypot(p.x - (b.x + b.r), p.y - (b.y + b.r)) <= b.r + 8;
   const inRect = (p, r) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
   const buildRect = () => {   // the screen area the rug should fit into
     const b = binRectUI();
@@ -233,8 +232,12 @@ window.__buildInit = function buildInit() {
       return;
     }
     if (pointers.size > 1) return;
-    if (inBtn(p, camBtn())) { drag = { kind: 'button', which: 'cam' }; return; }
-    if (AUDIO && inBtn(p, muteBtn())) { drag = { kind: 'button', which: 'mute' }; return; }
+    {
+      const btns = [['cam', camBtn()], ...(AUDIO ? [['mute', muteBtn()]] : [])];
+      const dist = b => Math.hypot(p.x - (b.x + b.r), p.y - (b.y + b.r));
+      const near = btns.reduce((a, b) => dist(b[1]) < dist(a[1]) ? b : a);
+      if (dist(near[1]) <= near[1].r + 8) { drag = { kind: 'button', which: near[0] }; return; }
+    }
     if (!cam.topDown) {
       // carpet level: a tap winds whichever toy is under it (or the engine)
       const c = carScreen(), e = engineScreen();
@@ -466,8 +469,12 @@ window.__buildInit = function buildInit() {
     const p = px(e); Object.assign(pointers.get(e.pointerId), p);
     moveDrag(p);
   });
-  const endPtr = e => { if (pointers.has(e.pointerId)) up(e.pointerId, px(e)); };
+  // user activation on touch arrives with the finger lifting, not landing, so
+  // the context is resumed here as well as on pointerdown (iOS needs the
+  // resume inside the gesture)
+  const endPtr = e => { SFX.unlock(); if (pointers.has(e.pointerId)) up(e.pointerId, px(e)); };
   canvas.addEventListener('pointerup', endPtr);
+  canvas.addEventListener('touchend', () => SFX.unlock(), { passive: true });
   canvas.addEventListener('pointercancel', e => { if (pointers.has(e.pointerId)) { pointers.delete(e.pointerId); cancelDrag(); } });
   canvas.addEventListener('wheel', e => {
     if (!cam.topDown) return;

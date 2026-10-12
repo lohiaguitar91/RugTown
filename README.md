@@ -40,7 +40,9 @@ the carpet and watch it run. **The floor was the first open world.**
   round at the ends of the scale; straights are rests; a loop plays its
   phrase every lap and slows as the spring runs down; an open line plays
   it out and bumps. Pins belong to pieces, so the same share link plays the
-  same tune and a train run backwards plays it backwards. The sim never
+  same tune and a train run backwards plays it backwards. A train that
+  runs down on the crossing keeps the gate down and the bell falls quiet
+  until you wind it again. The sim never
   waits on sound: each tick only logs what happened (`SIM_EVENTS`), and the
   audio layer schedules those a few milliseconds ahead on audio time. Sound
   unlocks on the first touch; the round button under the camera button
