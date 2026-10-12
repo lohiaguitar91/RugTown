@@ -36,8 +36,8 @@ you see is drawn in code), no sound yet — the plan is that the whole layout
 is a music box, where every switch and crossing strikes a note.
 
 For the skeptics, the plan is: pay once, own it. No ads, no accounts, no
-energy meters, no season pass. Tablet first, because a tablet on a carpet
-*is* the rug; a free web version so shared layouts open for anyone.
+energy meters, no season pass. Phone or tablet — whichever is already on
+the floor with you; a free web version so shared layouts open for anyone.
 
 What I'd actually love from this thread: **what do you remember from your
 floor?** Which piece was the one you fought your sibling for?

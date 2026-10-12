@@ -217,14 +217,20 @@ consumable — tuned for a toy:
   the viewer doesn't own (they can watch, not edit-with-owned-pieces-only
   restrictions on remix apply). The share link is the ad.
 
-## 7. Platform strategy: app-first, web demo alongside
+## 7. Platform strategy: phones first, web demo alongside
 
-Asked in review whether this is app-only or web + app. **Web + app, with
-the app as the product:**
+Asked in review whether this is app-only or web + app, and asked again
+after the first public post whether it should be Steam instead (§ 10 Q8).
+**Web + app, with the app as the product, and the phone as the baseline:**
 
-- **The app (iOS + Android, iPad/tablet first-class)** is the premium toy.
-  Tablets are the natural rug — the marketing renders lead with hands on
-  an iPad on an actual carpet.
+- **The app (iOS + Android)** is the premium toy. **The phone is the
+  design baseline, not the tablet:** every screen, the toy bin, the
+  drag-and-snap targets, the captions, and the carpet-level cam have to
+  work on a ~6-inch phone first. A tablet inherits the same layout with
+  more rug in view — never a separate UI, and nothing tuned for an iPad
+  that doesn't also hold on a phone. Both orientations work: the builder's
+  top-down turns the rug to fill whichever way the phone is held, carpet
+  level frames tighter in portrait, and the toy never asks you to rotate.
 - **The web build is the demo and the share viewer.** The stack is already
   web-native (§ 8), so a browser Starter Bin costs almost nothing and
   every shared layout link opens instantly for anyone, no install — the
@@ -232,9 +238,15 @@ the app as the product:**
   wonder in sixty seconds, then a quiet "get the Whole Toy Chest" that
   deep-links to the stores. Web purchases: not v1 (store billing only);
   revisit if the demo converts.
-- **Desktop/Steam: parked.** The existing PC track-builder owns
-  first-person trains; ours is the top-down cozy miniature. A later port
-  is plausible; it is not v1.
+- **Desktop/Steam: parked, for scope, not market.** Evaluated properly in
+  Oct 2026 (§ 10 Q8): the "toy, not a game" category has become a Steam
+  category (Townscaper, Summerhouse, Tiny Glade), and the first-person PC
+  train builder proves the wooden-train audience is there — so the market
+  case for Steam is real. What it costs is a Steam page living 6–12 months
+  before launch on a sustained wishlist campaign, a Windows build, and a
+  Deck pass: a bigger project than this one wants to be. The stack ships
+  to Steam inside Electron with little new work, so if the mobile version
+  earns it, a later port is a port, not a pivot.
 
 ## 8. Tech plan
 
@@ -328,13 +340,11 @@ de-risks the bigger build either way. Cross-promotion both ways via the
    little, and it keeps the shop's attention on getting the arcade's
    revenue live instead of running two Phase 0s at once. Revisit only if
    the arcade's Phase 2 stalls hard.
-6. **Tablet-first marketing — decided: tablet-first hero.** Lead store
-   and marketing renders with an iPad on an actual carpet, not phone
-   screenshots — it's the truest picture of the core fantasy (get down
-   on the floor with it), it reads better for two-finger pan/zoom
-   building (pillar 3, § 2), and it stands out from generic phone-game
-   screenshots. Phone shots stay in the listing as secondary, confirmed
-   with real renders at Phase 2.
+6. **Tablet-first marketing — superseded by Q8 (Oct 12 2026).** The
+   original call was an iPad-on-the-carpet hero. With the phone as the
+   design baseline, the hero is the carpet-level trailer itself plus a
+   phone in hand on the rug; tablet shots are secondary. The "get down on
+   the floor with it" fantasy is carried by the camera, not the device.
 7. **Elevation: physics or hand-held? — decided: hand-held, no bracing
    piece.** A riser only ghost-snaps where a book, cushion, or another
    riser is already there to climb onto (§ 4, § 5) — the furniture is the
@@ -342,3 +352,12 @@ de-risks the bigger build either way. Cross-promotion both ways via the
    fail. Keeps faith with pillar 1 (no-fail) and pillar 3 (invalid
    placements simply don't exist) without building a physics engine the
    toy doesn't need.
+8. **Platform — decided: iOS/Android, phone-baseline; Steam parked
+   (Oct 12 2026).** Re-opened after the first Reddit post with Steam
+   seriously on the table. The market case for Steam is strong (§ 7), but
+   it is a 6–12 month wishlist campaign plus a second build target, and
+   that is a bigger project than this one is. Mobile it is — and not
+   tablet-first: the phone is the hard constraint every screen is designed
+   against, the tablet inherits. Q2's $6.99 stands (mobile pricing); Q6 is
+   superseded. If the toy earns an audience, Steam is a port later, not a
+   pivot now.

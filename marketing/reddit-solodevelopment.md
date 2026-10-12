@@ -70,9 +70,9 @@ screenshotted through headless Chromium, and every toy sound is synthesized
 from the sim's own events. No samples, no engine, no footage of anything
 that didn't actually happen in the toy.
 
-The plan is pay once, own it. No ads, no accounts, no energy meters. Tablet
-first, because a tablet on a carpet *is* the rug; a free web version so
-shared layouts open for anyone.
+The plan is pay once, own it. No ads, no accounts, no energy meters. Phone
+or tablet — whichever is already on the floor with you; a free web version
+so shared layouts open for anyone.
 
 Two things I'd love from this thread: **what do you remember from your
 floor** — which piece was the one you fought your sibling for? And from the
@@ -94,7 +94,7 @@ outright, this is the wrong sub for this post — don't argue it in comments.
 - **"What engine?"** None. Vanilla JS on a 2D canvas; the 3D is a few
   hundred lines of projection and a near-plane clip. The pitch for that:
   three products on one tiny stack, no build step, ships as a static page.
-- **"Platforms / when?"** iOS + Android, tablet first, free web demo. No
+- **"Platforms / when?"** iOS + Android, phone and tablet, free web demo. No
   date — "weeks-old prototype" is the entire status. Don't be talked into
   one.
 - **"Price?"** Pay once; the number isn't final and isn't the point yet.
