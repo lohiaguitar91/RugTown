@@ -11,21 +11,36 @@ the carpet and watch it run. **The floor was the first open world.**
   with no ads, the app-first + web-demo platform plan, tech plan, roadmap.
 - Status: design locked for Phase 0; the week-one spike is in
   [`spike/carpet-cam/`](spike/carpet-cam/) (see below).
-- **Phase 0 spike — the carpet-level camera and the crossing.** Open
-  `spike/carpet-cam/index.html` from any static server (no build step,
-  no dependencies) — e.g. `python3 -m http.server` from the repo root.
-  One snapped oval of wooden track on the rug, a rug road looping through
-  it, a wind-up engine and a pull-back car billboarded from pre-rendered
-  sprite rotations, the crossing gate + bell where road meets rail, and the
-  cheek-on-the-rug follow-cam. Tap the engine or the car to rewind its
-  spring; `C` toggles the top-down debug camera; `F` cycles the sprite sets
-  through 8/16/32/64 rotation frames — the live comparison behind the
-  sprites-vs-hybrid decision in DESIGN.md §8.
+- **Phase 0 spike — the carpet-level camera, the crossing, and the build
+  verb.** Open `spike/carpet-cam/index.html` from any static server (no
+  build step, no dependencies) — e.g. `python3 -m http.server` from the
+  repo root, then on a phone on the same Wi-Fi open
+  `http://<laptop-ip>:8000/spike/carpet-cam/`. The rails are a graph of
+  placed peg-and-hole pieces: drag a straight or a curve out of the toy bin
+  and it ghost-snaps to the nearest open peg (a curve tries both hands);
+  the first piece lands anywhere on the rug; drag a placed piece to move
+  it, or onto the bin to put it away; tap a placed curve to flip its hand,
+  a free straight to turn it. The engine is a drag-out too: drop it on any
+  track, pull it back and let go to wind it (it runs away from the pull;
+  a tap winds it fully), carry it off the rails to turn it round. At an
+  open end it coasts to a bump and stops. The rug road is fixed; wherever a
+  rail piece crosses it, a gated crossing appears and the pull-back car
+  waits for the train. The layout lives in the URL hash — that's the share
+  link; the oval is ~250 bytes. Phone first (DESIGN.md §7): the bin is a
+  thumb strip (bottom in portrait, side in landscape), the rug turns to
+  fill the screen either way, pinch to zoom, one finger on the rug to pan,
+  the round button swaps builder ⇄ carpet level. `main.js` is the model,
+  sim and renderer; `build.js` is the touch work.
   Harness (DESIGN.md §8 verification discipline): `?s=<cm>` freezes the
   engine at an arclength for deterministic screenshots, `?soak=<n>` runs
-  n headless ticks and asserts the car never deadlocks at the gate,
-  `?bench=<n>` reports ms/frame, and `window.__rug` exposes the same from
-  the console.
+  n headless ticks on the oval and asserts the car never deadlocks at the
+  gate, `?soaklayouts=<n>&secs=<s>` grows n random valid layouts and runs
+  each with an emulated player (rewinds, turns the engine round at buffer
+  ends), asserting no NaN, no stuck engine and no car deadlock,
+  `?bench=<n>` reports ms/frame, `?cam=top|carpet` picks the camera, and
+  `window.__rug` / `window.__build` expose the same from the console or a
+  script (`__build.drag`, `.tap`, `.slot(i)`, `.endScreen(i)` drive the
+  real gesture code).
 - **The clip.** `?clip=1` plays a deterministic 14-second loop: follow the
   engine off the far straight and round the curve, settle on the crossing
   as the gate drops and the car waits, then swing back behind the engine so

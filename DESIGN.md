@@ -138,6 +138,26 @@ explicit answer on photo privacy (processed and discarded, never stored,
 never trains anything) before it's more than an idea. Not scoped into any
 phase in § 9 — it needs its own small spike on cost and privacy first.
 
+**From the first post** (r/SoloDevelopment, Oct 2026 — the first strangers
+to see the crossing clip asked for these, in this order):
+
+- **A track-layer peg person.** A little peg doll riding the engine's nose
+  who lays track ahead of it as it runs — the train that builds its own
+  line. The gag (a character laying track in front of a moving toy train)
+  is a mechanic; the character everyone pictures when they hear it is
+  Aardman's, and § 3 applies: a dot-simple peg doll, never a beagle. Fits
+  pillar 4 exactly (it runs without you) and is the most-asked-for idea so
+  far. Candidate for Phase 1's peg-people pass.
+- **Stop signs and "road closed" barriers the cars obey.** The gate logic
+  already makes a car brake for a signal and wait; a stop sign is the same
+  logic with a pause instead of a wait, and a barrier (a little striped
+  trestle with a "ROAD CLOSED" board) is a road piece that turns the car
+  round. Both are road-bin pieces, cheap once the road is a graph.
+- **Bridges.** Already covered: risers that climb onto books and cushions,
+  and the clackety drawbridge (§ 4, Rails). Worth noting that the request
+  came unprompted — the furniture-as-terrain idea reads from a 14-second
+  clip without being explained.
+
 ## 5. The toy systems
 
 **Building.** Pieces live in a toy bin at the screen edge; drag out, they
