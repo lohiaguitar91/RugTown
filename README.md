@@ -12,9 +12,9 @@ the carpet and watch it run. **The floor was the first open world.**
 - Status: design locked for Phase 0; the Phase 0 spike is in
   [`spike/carpet-cam/`](spike/carpet-cam/) (see below) and **live at
   [lohiaguitar91.github.io/RugTown](https://lohiaguitar91.github.io/RugTown/)**
-  (GitHub Pages, published from `main` on every push by
-  `.github/workflows/pages.yml`; the root page forwards to the toy). Open
-  it on a phone; a share link's `#` hash survives the forward.
+  (GitHub Pages, deployed from the root of `main` on every push; `.nojekyll`
+  keeps it a plain copy of the checkout, and the root page forwards to the
+  toy). Open it on a phone; a share link's `#` hash survives the forward.
 - **Phase 0 spike — the carpet-level camera, the crossing, the build verb,
   and the sound.** Open the live page above, or `spike/carpet-cam/index.html`
   from any static server (no build step, no dependencies) — e.g.
