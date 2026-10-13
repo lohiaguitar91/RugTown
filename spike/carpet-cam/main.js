@@ -469,11 +469,12 @@ function rebuild(anchor = engineAnchor()) {
     S.eng.dir = tp.forward ? anchor.facing : -anchor.facing;
     S.eng.piece = anchor.piece;
     S.eng.tpi = trackPieceIndexAt(S.eng.s, 0);
-    // parked exactly on a joint, facing into the next piece: not yet entered,
-    // so the first tick strikes that piece's pin — the curve you just laid in
-    // front of a waiting engine is the first note you hear
+    // a halted engine parked exactly on a joint, facing into the next piece,
+    // has not entered it yet, so the first tick strikes that piece's pin — the
+    // curve you just laid in front of a waiting engine is the first note you
+    // hear. (A running engine keeps the plain lookup: same tune as before.)
     { const P = TRACKINFO.pieces, k = S.eng.tpi, p = P[k];
-      if (p && S.eng.dir > 0 && Math.abs(S.eng.s - p.s0) < 1e-6 && (TRACKINFO.closed || k > 0)) S.eng.tpi = (k - 1 + P.length) % P.length; }
+      if (p && S.eng.halted && S.eng.dir > 0 && Math.abs(S.eng.s - p.s0) < 1e-6 && (TRACKINFO.closed || k > 0)) S.eng.tpi = (k - 1 + P.length) % P.length; }
     // stopped at a buffer end that isn't one any more (the gap was filled, or
     // track was laid in front of it): it goes again, the spring is still wound
     const atEnd = !TRACKINFO.closed && ((S.eng.dir > 0 && S.eng.s >= RAIL.total - 0.01) || (S.eng.dir < 0 && S.eng.s <= 0.01));
@@ -572,9 +573,9 @@ function loadLayout(pieces, eng) {
 // touch, drag, pick-up, placement, closed loop, moving train, bell and wind
 // happened (seconds since load), and the taps that did nothing.
 const SESSION = {
-  t0: performance.now(), marks: {}, nopes: [],
+  t0: performance.now(), marks: {}, nopes: [], quiet: 0,   // quiet > 0 while the harness looks ahead
   now() { return +((performance.now() - this.t0) / 1000).toFixed(2); },
-  mark(k) { if (!(k in this.marks)) this.marks[k] = this.now(); },
+  mark(k) { if (!this.quiet && !(k in this.marks)) this.marks[k] = this.now(); },
   nope(what) { this.nopes.push({ t: this.now(), what }); },
   report() {
     const m = this.marks, g = k => (k in m ? m[k] : null);
@@ -1466,7 +1467,7 @@ const __rug = {
   // sim back exactly. No AudioContext involved — this is the fixture.
   notes(seconds = 30) {
     const snap = snapshotSim(), t0 = S.time, notes = [], counts = {};
-    SIM_EVENTS.length = 0;
+    SIM_EVENTS.length = 0; SESSION.quiet++;
     for (let i = 0, n = Math.round(seconds / FIXED_DT); i < n; i++) {
       tick();
       for (const ev of SIM_EVENTS) {
@@ -1475,7 +1476,7 @@ const __rug = {
       }
       SIM_EVENTS.length = 0;
     }
-    restoreSim(snap);
+    restoreSim(snap); SESSION.quiet--;
     return { layout: serializeLayout(), seconds, notes, counts };
   },
   // What the toy sounds like over the next `seconds`, rendered offline through
@@ -1485,7 +1486,7 @@ const __rug = {
   async renderAudio(seconds = CLIP.T, loops = 1) {
     if (!window.RugAudio || typeof OfflineAudioContext === 'undefined') throw new Error('audio.js or OfflineAudioContext missing');
     const snap = snapshotSim(), ct = clipTick, t0 = S.time, events = [], hush = [];
-    SIM_EVENTS.length = 0;
+    SIM_EVENTS.length = 0; SESSION.quiet++;
     const total = seconds * loops;
     for (let i = 0, n = Math.round(total / FIXED_DT); i < n; i++) {
       tick();
@@ -1493,7 +1494,7 @@ const __rug = {
       SIM_EVENTS.length = 0;
       if (i % 4 === 0) hush.push({ t: S.time - t0, v: S.car.v });
     }
-    restoreSim(snap); clipTick = ct;
+    restoreSim(snap); clipTick = ct; SESSION.quiet--;
     const SR = 44100, ctx = new OfflineAudioContext(2, Math.ceil(SR * total) + 1, SR);
     const syn = window.RugAudio.synth(ctx);
     for (const ev of events) syn.event(ev, ev.t);

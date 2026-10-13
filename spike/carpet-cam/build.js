@@ -137,7 +137,7 @@ window.__buildInit = function buildInit() {
   // The missing curve's outline, faint and dashed, where it belongs on the
   // rug — the picture on the box — breathing in time with the bin's slot.
   function drawMissingOutline() {
-    if (!FIRST.nudge || !FIRST.missing) return;
+    if (!FIRST.nudge || !FIRST.missing || !cam.topDown) return;
     buildView();
     const g = pieceGeom(FIRST.missing), path = makePath([g.seg]), bw = TRACK.bedW / 2;
     const edge = off => {
@@ -288,8 +288,7 @@ window.__buildInit = function buildInit() {
     for (let i = 0; i < SLOTS.length; i++) {
       if (!inRect(p, slotRect(i))) continue;
       const s = SLOTS[i];
-      SESSION.mark('pickup');
-      if (s.kind === 'E') { if (S.eng.placed) return; drag = { kind: 'engineNew', ghostPos: null, snap: null }; moveDrag(p); return; }
+      if (s.kind === 'E') { if (S.eng.placed) { SESSION.nope('bin'); return; } drag = { kind: 'engineNew', ghostPos: null, snap: null }; moveDrag(p); return; }
       drag = { kind: 'piece', type: s.kind, hand: curveHand, from: 'bin', ghost: null, overBin: false };
       clearTimeout(hashTimer);
       moveDrag(p);
@@ -322,7 +321,14 @@ window.__buildInit = function buildInit() {
       clearTimeout(hashTimer);   // the link never shows a piece that's in your hand
       drag = { kind: 'piece', type: pc.t, hand: pc.hand || curveHand, from: 'placed', prev: pc, prevIdx: drag.idx, engineOnIt, ghost: null, overBin: false };
     }
-    if (drag.kind === 'piece' || drag.kind === 'engineNew' || drag.kind === 'engine') SESSION.mark('drag');
+    // the log: a drag is a finger that moved; a pick-up is a bin piece that left the bin
+    if (drag.kind !== 'button' && drag.kind !== 'tapped' && drag.kind !== 'pinch') {
+      const pt = pointers.values().next().value;
+      if (pt && Math.hypot(p.x - pt.start.x, p.y - pt.start.y) > 10) {
+        SESSION.mark('drag');
+        if ((drag.kind === 'piece' && drag.from === 'bin') || drag.kind === 'engineNew') SESSION.mark('pickup');
+      }
+    }
     if (drag.kind === 'piece') {
       drag.overBin = inRect(p, bin);
       drag.ghost = drag.overBin ? null : ghostFor(drag.type, drag.hand, p.x, p.y, -1);
@@ -429,7 +435,8 @@ window.__buildInit = function buildInit() {
     const d = drag; drag = null;
     if (d.overBin) {
       // put away: a piece from the layout is gone; one from the bin never existed
-      if (d.from === 'placed') { SFX.snap(); syncHash(); }
+      if (d.from === 'placed') { SFX.snap(); FIRST.nudge = false; syncHash(); }   // the box's picture no longer matches
+      else SESSION.nope('bin');
       return;
     }
     if (d.ghost && d.ghost.valid) {
@@ -439,8 +446,10 @@ window.__buildInit = function buildInit() {
       if (d.engineOnIt) anchor = { piece: LAYOUT.length - 1, ...d.engineOnIt };   // the engine rides along
       rebuild(anchor);
       SFX.snap(); syncHash();
-      FIRST.nudge = false;   // the first piece has landed: the box's picture has done its job
-      SESSION.mark('placed'); if (TRACKINFO.closed) SESSION.mark('loopClosed');
+      if (d.from === 'bin') {   // the first piece has landed: the box's picture has done its job
+        FIRST.nudge = false;
+        SESSION.mark('placed'); if (TRACKINFO.closed) SESSION.mark('loopClosed');
+      }
       return;
     }
     // nowhere to put it: it springs back where it came from
@@ -450,7 +459,7 @@ window.__buildInit = function buildInit() {
 
   function dropEngine() {
     const d = drag; drag = null;
-    if (d.overBin) { if (d.kind === 'engine') { engineRemove(); SFX.snap(); syncHash(); } return; }
+    if (d.overBin) { if (d.kind === 'engine') { engineRemove(); SFX.snap(); syncHash(); } else SESSION.nope('bin'); return; }
     if (d.snap) { engineDropOn(d.snap.piece, d.snap.local, d.snap.facing); SFX.snap(); syncHash(); return; }
     SFX.nope();
     if (d.kind === 'engine') { engineRelease(0); }   // back onto its rails, where it was
@@ -500,7 +509,7 @@ window.__buildInit = function buildInit() {
   let hashTimer = 0;
   function syncHash() {
     clearTimeout(hashTimer);
-    hashTimer = setTimeout(() => { try { history.replaceState(null, '', '#' + serializeLayout()); } catch {} }, 150);
+    hashTimer = setTimeout(() => { if (FIRST.nudge) return; try { history.replaceState(null, '', '#' + serializeLayout()); } catch {} }, 150);   // the box isn't a layout yet
   }
   LAYOUT_HOOKS.push(() => { if (!drag) syncHash(); });
 
@@ -511,8 +520,7 @@ window.__buildInit = function buildInit() {
   canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture?.(e.pointerId); down(e.pointerId, px(e)); e.preventDefault(); });
   canvas.addEventListener('pointermove', e => {
     if (!pointers.has(e.pointerId)) return;
-    const pt = pointers.get(e.pointerId), p = px(e); Object.assign(pt, p);
-    if (Math.hypot(p.x - pt.start.x, p.y - pt.start.y) > 10) SESSION.mark('drag');
+    const p = px(e); Object.assign(pointers.get(e.pointerId), p);
     moveDrag(p);
   });
   // user activation on touch arrives with the finger lifting, not landing, so

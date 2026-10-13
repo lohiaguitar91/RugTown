@@ -25,7 +25,7 @@ the carpet and watch it run. **The floor was the first open world.**
   sits faint and dashed where it belongs and the curve's slot in the bin
   breathes, until the first piece lands. Drag that curve in and the loop
   closes, the train goes, the first note is the piece you laid, and the
-  bell is seconds away. A share link (`#…`) opens its own layout instead.
+  bell rings almost at once. A share link (`#…`) opens its own layout instead.
   The rails are a graph of
   placed peg-and-hole pieces: drag a straight or a curve out of the toy bin
   and it ghost-snaps to the nearest open peg (a curve tries both hands);
