@@ -29,7 +29,7 @@ window.__buildInit = function buildInit() {
     snap: () => { if (AUDIO) AUDIO.ui('snap'); },
     ratchet: () => { if (AUDIO) AUDIO.ui('ratchet'); },
     release: () => { if (AUDIO) AUDIO.ui('release'); },
-    nope: () => { if (AUDIO) AUDIO.ui('nope'); },
+    nope: () => { if (AUDIO) AUDIO.ui('nope'); SESSION.nope('toy'); },
   };
 
   // ---------------------------------------------------------------- the bin and the buttons (screen space)
@@ -82,8 +82,10 @@ window.__buildInit = function buildInit() {
     SLOTS.forEach((s, i) => {
       const r = slotRect(i);
       const active = drag && ((drag.kind === 'piece' && drag.type === s.kind && drag.from === 'bin') || (drag.kind === 'engineNew' && s.kind === 'E'));
+      const breathe = FIRST.nudge && s.kind === 'C' && !active ? 0.5 + 0.5 * Math.sin(S.time * 2.2) : 0;
       roundRectPath(r.x, r.y, r.w, r.h, 10);
-      ctx.fillStyle = trashing ? '#7a4a3a' : active ? '#7a5c44' : '#5c4534'; ctx.fill();
+      ctx.fillStyle = trashing ? '#7a4a3a' : active ? '#7a5c44' : breathe ? `rgb(${92 + 40 * breathe | 0},${69 + 30 * breathe | 0},${52 + 20 * breathe | 0})` : '#5c4534'; ctx.fill();
+      if (breathe) { ctx.lineWidth = 1.5; ctx.strokeStyle = `rgba(217,164,65,${0.2 + 0.5 * breathe})`; ctx.stroke(); }
       const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
       if (s.kind === 'S') {
         roundRectPath(cx - 24, cy - 6, 48, 12, 3); ctx.fillStyle = C.bed; ctx.fill();
@@ -130,6 +132,35 @@ window.__buildInit = function buildInit() {
     ctx.lineCap = 'butt';
   }
 
+  // ---------------------------------------------------------------- the first-run nudge
+
+  // The missing curve's outline, faint and dashed, where it belongs on the
+  // rug — the picture on the box — breathing in time with the bin's slot.
+  function drawMissingOutline() {
+    if (!FIRST.nudge || !FIRST.missing) return;
+    buildView();
+    const g = pieceGeom(FIRST.missing), path = makePath([g.seg]), bw = TRACK.bedW / 2;
+    const edge = off => {
+      const pts = [];
+      for (let s = 0; s <= g.len + 1e-6; s += 1.5) {
+        const { p, tan } = pathAt(path, Math.min(s, g.len));
+        const c = toCam(v3(p.x - tan.z * off, RAIL_H + 0.05, p.z + tan.x * off));
+        if (c.z > CAM.near) pts.push(toScreen(c));
+      }
+      return pts;
+    };
+    const L = edge(-bw), R = edge(bw);
+    if (L.length < 2 || R.length < 2) return;
+    const line = pts => { ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.stroke(); };
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = 0.3 + 0.3 * (0.5 + 0.5 * Math.sin(S.time * 2.2));
+    ctx.strokeStyle = C.bed; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.setLineDash([6, 6]);
+    line(L); line(R);
+    ctx.setLineDash([]);
+    line([L[0], R[0]]); line([L[L.length - 1], R[R.length - 1]]);
+    ctx.globalAlpha = 1; ctx.lineCap = 'butt';
+  }
+
   // ---------------------------------------------------------------- the ghost (a piece or the engine in hand)
 
   let drag = null;   // { kind: 'piece'|'engine'|'engineNew'|'pan'|'pinch'|'maybe', ... }
@@ -141,14 +172,22 @@ window.__buildInit = function buildInit() {
     buildView();
     const reach = 64;
     let best = null;
-    for (const e of openEnds()) {
+    const ends = openEnds();
+    for (const e of ends) {
       if (e.piece === ignoreIdx) continue;
       const c = toCam(v3(e.p.x, RAIL_H, e.p.z)); if (c.z <= CAM.near) continue;
       const s = toScreen(c), d = Math.hypot(s.x - sx, s.y - sy);
-      if (d > reach || (best && d >= best.d)) continue;
+      if (d > reach) continue;
       for (const hh of type === 'C' ? [hand, -hand] : [0]) {
         const pc = pieceAfter(e, type, hh);
-        if (pieceFits(pc, LAYOUT, ignoreIdx)) { best = { d, pc, end: e, snapped: true }; break; }
+        if (!pieceFits(pc, LAYOUT, ignoreIdx)) continue;
+        // a piece whose far end meets another open end closes a gap: that is
+        // what you meant, whichever end you brought it to and whichever way
+        // the curve in your hand happens to bend
+        const far = pieceEnds(pc)[1];
+        const bridges = ends.some(o => o.piece !== e.piece && o.piece !== ignoreIdx && dist2(o.p, far.p) < MATE_TOL && Math.abs(wrapAngle(o.out - far.out + Math.PI)) < MATE_ANG);
+        const score = (bridges ? 0 : reach * 4) + d;   // a gap-closer first, then the nearest end
+        if (!best || score < best.score) best = { score, pc };
       }
     }
     if (best) return { pc: best.pc, valid: true, snapped: true };
@@ -223,7 +262,7 @@ window.__buildInit = function buildInit() {
 
   function down(id, p) {
     pointers.set(id, { ...p, start: p, t0: performance.now() });
-    SFX.unlock();
+    SFX.unlock(); SESSION.mark('touch');
     if (pointers.size === 2 && cam.topDown) {
       // second finger: whatever was in hand goes back, and we pinch
       cancelDrag();
@@ -242,13 +281,14 @@ window.__buildInit = function buildInit() {
       // carpet level: a tap winds whichever toy is under it (or the engine)
       const c = carScreen(), e = engineScreen();
       const d = s => s ? Math.hypot(s.x - p.x, s.y - p.y) : Infinity;
-      if (d(c) < 70 && d(c) < d(e)) rewindCar(); else rewindEngine();
+      if (d(c) < 70 && d(c) < d(e)) rewindCar(); else { rewindEngine(); SESSION.mark('wind'); }
       drag = { kind: 'tapped' };
       return;
     }
     for (let i = 0; i < SLOTS.length; i++) {
       if (!inRect(p, slotRect(i))) continue;
       const s = SLOTS[i];
+      SESSION.mark('pickup');
       if (s.kind === 'E') { if (S.eng.placed) return; drag = { kind: 'engineNew', ghostPos: null, snap: null }; moveDrag(p); return; }
       drag = { kind: 'piece', type: s.kind, hand: curveHand, from: 'bin', ghost: null, overBin: false };
       clearTimeout(hashTimer);
@@ -282,6 +322,7 @@ window.__buildInit = function buildInit() {
       clearTimeout(hashTimer);   // the link never shows a piece that's in your hand
       drag = { kind: 'piece', type: pc.t, hand: pc.hand || curveHand, from: 'placed', prev: pc, prevIdx: drag.idx, engineOnIt, ghost: null, overBin: false };
     }
+    if (drag.kind === 'piece' || drag.kind === 'engineNew' || drag.kind === 'engine') SESSION.mark('drag');
     if (drag.kind === 'piece') {
       drag.overBin = inRect(p, bin);
       drag.ghost = drag.overBin ? null : ghostFor(drag.type, drag.hand, p.x, p.y, -1);
@@ -361,8 +402,10 @@ window.__buildInit = function buildInit() {
     if (drag.kind === 'engine') {
       engineRelease(drag.pulled);
       if (Math.abs(drag.pulled) >= 1) SFX.release();
+      SESSION.mark('wind');
       drag = null; syncHash(); return;
     }
+    if (drag.kind === 'pan' && tapLike) SESSION.nope('rug');   // a tap on nothing
     drag = null;
   }
 
@@ -396,6 +439,8 @@ window.__buildInit = function buildInit() {
       if (d.engineOnIt) anchor = { piece: LAYOUT.length - 1, ...d.engineOnIt };   // the engine rides along
       rebuild(anchor);
       SFX.snap(); syncHash();
+      FIRST.nudge = false;   // the first piece has landed: the box's picture has done its job
+      SESSION.mark('placed'); if (TRACKINFO.closed) SESSION.mark('loopClosed');
       return;
     }
     // nowhere to put it: it springs back where it came from
@@ -466,7 +511,8 @@ window.__buildInit = function buildInit() {
   canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture?.(e.pointerId); down(e.pointerId, px(e)); e.preventDefault(); });
   canvas.addEventListener('pointermove', e => {
     if (!pointers.has(e.pointerId)) return;
-    const p = px(e); Object.assign(pointers.get(e.pointerId), p);
+    const pt = pointers.get(e.pointerId), p = px(e); Object.assign(pt, p);
+    if (Math.hypot(p.x - pt.start.x, p.y - pt.start.y) > 10) SESSION.mark('drag');
     moveDrag(p);
   });
   // user activation on touch arrives with the finger lifting, not landing, so
@@ -490,7 +536,7 @@ window.__buildInit = function buildInit() {
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   window.addEventListener('keydown', e => { if (e.key.toLowerCase() === 'c') { cam.topDown = !cam.topDown; toggleCamera(); } });
 
-  RENDER_HOOKS.push(drawGhost, drawToyBin, drawButtons);
+  RENDER_HOOKS.push(drawMissingOutline, drawGhost, drawToyBin, drawButtons);
 
   cam.topDown = Q.get('cam') !== 'carpet';
   if (cam.topDown) fitTop(buildRect());
@@ -512,6 +558,7 @@ window.__buildInit = function buildInit() {
     mute: b => { if (AUDIO) AUDIO.setMuted(b); return AUDIO ? AUDIO.muted : null; },
     muteScreen: () => { const b = muteBtn(); return { x: b.x + b.r, y: b.y + b.r }; },
     audio: () => AUDIO ? { muted: AUDIO.muted, state: AUDIO.state() } : null,
+    first: () => ({ nudge: FIRST.nudge, missing: !!FIRST.missing }),
     render: () => { render(); return true; },
     tickSeconds: s => { for (let i = 0; i < Math.round(s / FIXED_DT); i++) tick(); },
   };

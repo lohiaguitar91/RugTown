@@ -29,6 +29,7 @@
 //         ?notes=<sec> the tune the layout plays · ?notescheck=1 vs the fixture
 //         ?clip=1 the deterministic clip loop · ?clip=1&t=<sec> freeze a frame
 //         ?clipcheck=1 report clip periodicity/timings · #<layout> share link
+//         ?log=1 the first-two-minutes session log under the HUD
 
 'use strict';
 
@@ -468,6 +469,11 @@ function rebuild(anchor = engineAnchor()) {
     S.eng.dir = tp.forward ? anchor.facing : -anchor.facing;
     S.eng.piece = anchor.piece;
     S.eng.tpi = trackPieceIndexAt(S.eng.s, 0);
+    // parked exactly on a joint, facing into the next piece: not yet entered,
+    // so the first tick strikes that piece's pin — the curve you just laid in
+    // front of a waiting engine is the first note you hear
+    { const P = TRACKINFO.pieces, k = S.eng.tpi, p = P[k];
+      if (p && S.eng.dir > 0 && Math.abs(S.eng.s - p.s0) < 1e-6 && (TRACKINFO.closed || k > 0)) S.eng.tpi = (k - 1 + P.length) % P.length; }
     // stopped at a buffer end that isn't one any more (the gap was filled, or
     // track was laid in front of it): it goes again, the spring is still wound
     const atEnd = !TRACKINFO.closed && ((S.eng.dir > 0 && S.eng.s >= RAIL.total - 0.01) || (S.eng.dir < 0 && S.eng.s <= 0.01));
@@ -516,6 +522,16 @@ function defaultLayout() {
   return out;
 }
 
+// The box the toy comes in: the oval with its last curve missing and the
+// engine parked at the gap, wound, so the first thing anyone does is drag the
+// curve that closes the loop — and the train goes, and the bell rings. Live
+// play only, and only without a share link; the harness keeps the full oval.
+const FIRST = { nudge: false, missing: null };   // build.js draws the nudges while `nudge` holds
+function firstRunLayout() {
+  const oval = defaultLayout(), last = oval.length - 1;
+  return { pieces: oval.slice(0, last), missing: oval[last], eng: { piece: last - 1, local: pieceGeom(oval[last - 1]).len, facing: 1 } };
+}
+
 // --- the share link: pieces as type@x,z,heading°; the engine as piece,local,facing
 function serializeLayout() {
   const parts = LAYOUT.map(pc => `${pc.t === 'C' ? (pc.hand > 0 ? 'L' : 'R') : 'S'}${pc.x.toFixed(2)},${pc.z.toFixed(2)},${Math.round(pc.h * 180 / Math.PI)}`);
@@ -551,6 +567,20 @@ function loadLayout(pieces, eng) {
 }
 
 // ---------------------------------------------------------------- sim (fixed dt, deterministic)
+
+// The first two minutes, for reading a cold test afterwards: when the first
+// touch, drag, pick-up, placement, closed loop, moving train, bell and wind
+// happened (seconds since load), and the taps that did nothing.
+const SESSION = {
+  t0: performance.now(), marks: {}, nopes: [],
+  now() { return +((performance.now() - this.t0) / 1000).toFixed(2); },
+  mark(k) { if (!(k in this.marks)) this.marks[k] = this.now(); },
+  nope(what) { this.nopes.push({ t: this.now(), what }); },
+  report() {
+    const m = this.marks, g = k => (k in m ? m[k] : null);
+    return { elapsed: this.now(), touch: g('touch'), drag: g('drag'), pickup: g('pickup'), placed: g('placed'), loopClosed: g('loopClosed'), go: g('go'), bell: g('bell'), wind: g('wind'), nopes: this.nopes.length, nopeTimes: this.nopes.slice(0, 6) };
+  },
+};
 
 const S = {
   eng: { placed: false, piece: 0, s: 0, dir: 1, spring: 1, laps: 0, halted: false, v: 0, tpi: 0, tickAcc: 0 },
@@ -602,6 +632,7 @@ function tick() {
   }
   e.v = vEng;
   const moving = e.placed && !e.halted && vEng > 0.01;
+  if (moving) SESSION.mark('go');
 
   // gates: drop as the engine approaches, lift once it's clear; a train
   // sitting on the crossing keeps it down
@@ -627,7 +658,7 @@ function tick() {
     const ringing = c.active && (moving || c.angle < 1);
     c.bell = ringing ? c.bell + dt * 9 : c.bell * Math.max(0, 1 - dt * 3);
     const ph = Math.floor((c.bell + Math.PI / 2) / Math.PI);
-    if (ringing && ph > c.bellPhase) emit({ kind: 'bell', t: S.time });
+    if (ringing && ph > c.bellPhase) { emit({ kind: 'bell', t: S.time }); SESSION.mark('bell'); }
     c.bellPhase = ph;
   }
 
@@ -1232,7 +1263,7 @@ function drawLamp() {
   ctx.drawImage(lampCanvas, 0, 0, W, H);
 }
 
-let fpsAvg = 0, hudOn = true;
+let fpsAvg = 0, hudOn = true, logOn = false;
 const touchDevice = () => 'ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0;
 function drawHud() {
   if (!hudOn) return;
@@ -1249,6 +1280,13 @@ function drawHud() {
     ? (narrow ? 'drag from the bin · tap a curve to flip' : touchDevice() ? 'drag from the bin · tap a curve to flip · pull the engine back' : 'drag from the bin · tap a curve to flip · pull the engine back · [c] carpet · [f] frames')
     : (narrow || touchDevice() ? 'tap the engine or car to wind it' : 'tap the engine or car to wind it · [c] build · [f] frames');
   ctx.fillText(hint, 12, 38);
+  if (logOn) {
+    const r = SESSION.report(), f = v => v === null ? '–' : v.toFixed(1);
+    const items = [`touch ${f(r.touch)}`, `drag ${f(r.drag)}`, `pickup ${f(r.pickup)}`, `placed ${f(r.placed)}`, `loop ${f(r.loopClosed)}`, `go ${f(r.go)}`, `bell ${f(r.bell)}`, `wind ${f(r.wind)}`, `nopes ${r.nopes}`, `${r.elapsed.toFixed(0)}s`];
+    const per = narrow ? 3 : 5;   // short rows on a phone, clear of the buttons
+    ctx.font = '11px ui-monospace, monospace'; ctx.fillStyle = 'rgba(240,225,200,0.6)';
+    for (let i = 0; i * per < items.length; i++) ctx.fillText(items.slice(i * per, (i + 1) * per).join(' · '), 12, 56 + 16 * i);
+  }
 }
 
 // ---------------------------------------------------------------- loop, harness
@@ -1506,6 +1544,7 @@ const __rug = {
   },
   clipSeek(t) { clipSeek(t); SIM_EVENTS.length = 0; render(); return { t: clipT(), engS: +S.eng.s.toFixed(2), carS: +S.car.s.toFixed(2) }; },
   hud(on) { hudOn = !!on; },
+  session: () => SESSION.report(),
   layout: () => ({ pieces: LAYOUT.length, closed: TRACKINFO.closed, trackCm: +RAIL.total.toFixed(1), crossings: CROSSINGS.map(c => ({ gated: c.gated, roadS: +c.roadS.toFixed(1) })), hash: serializeLayout(), hashBytes: serializeLayout().length, openEnds: openEnds().length }),
   stats: () => ({ eng: S.eng, car: S.car, frameMs, sprites: sprites.engine.length }),
 };
@@ -1539,11 +1578,19 @@ function main() {
   bakeAll(spriteFrames);
   if (window.RugAudio && !clipMode) AUDIO = window.RugAudio.live();
 
-  // the layout: the share link if there is one, else the oval
+  // the layout: the share link if there is one; else, in live play, the box
+  // the toy comes in (the oval with a gap, the engine waiting at it); else,
+  // for the harness and the clip, the full oval
+  const harness = clipMode || ['s', 'bench', 'soak', 'soaklayouts', 'notes', 'notescheck'].some(k => Q.has(k));
   let fromHash = null;
   if (!clipMode) { try { fromHash = parseLayout(decodeURIComponent(location.hash.slice(1))); } catch { fromHash = null; } }
   if (fromHash) loadLayout(fromHash.pieces, fromHash.eng);
-  else loadLayout(defaultLayout(), { piece: 0, local: 0, facing: 1 });
+  else if (!harness && window.__buildInit) {
+    const fr = firstRunLayout();
+    loadLayout(fr.pieces, fr.eng);
+    S.eng.halted = true;   // parked at the gap, wound, waiting for its track
+    FIRST.nudge = true; FIRST.missing = fr.missing;
+  } else loadLayout(defaultLayout(), { piece: 0, local: 0, facing: 1 });
 
   window.addEventListener('keydown', e => {
     const key = e.key.toLowerCase();
@@ -1558,6 +1605,7 @@ function main() {
   const out = document.getElementById('out');
   if (Q.get('cam') === 'top') { cam.topDown = true; fitTop(); }
   if (Q.get('hud') === '0') hudOn = false;
+  if (Q.get('log') === '1') logOn = true;
   const freezeS = Q.get('s'), bench = Q.get('bench'), soak = Q.get('soak'), soakLayouts = Q.get('soaklayouts'), notesSec = Q.get('notes');
   if (notesSec !== null) {
     out.hidden = false; out.textContent = JSON.stringify(__rug.notes(parseFloat(notesSec) || 30));

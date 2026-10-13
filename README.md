@@ -19,7 +19,14 @@ the carpet and watch it run. **The floor was the first open world.**
   and the sound.** Open the live page above, or `spike/carpet-cam/index.html`
   from any static server (no build step, no dependencies) — e.g.
   `python3 -m http.server` from the repo root, then on a phone on the same
-  Wi-Fi open `http://<laptop-ip>:8000/spike/carpet-cam/`. The rails are a graph of
+  Wi-Fi open `http://<laptop-ip>:8000/spike/carpet-cam/`. **It opens as
+  the box the toy comes in:** the oval with its last curve missing, the
+  engine parked at the gap, wound and waiting; the missing curve's outline
+  sits faint and dashed where it belongs and the curve's slot in the bin
+  breathes, until the first piece lands. Drag that curve in and the loop
+  closes, the train goes, the first note is the piece you laid, and the
+  bell is seconds away. A share link (`#…`) opens its own layout instead.
+  The rails are a graph of
   placed peg-and-hole pieces: drag a straight or a curve out of the toy bin
   and it ghost-snaps to the nearest open peg (a curve tries both hands);
   the first piece lands anywhere on the rug; drag a placed piece to move
@@ -62,7 +69,11 @@ the carpet and watch it run. **The floor was the first open world.**
   `?notes=<sec>` prints the pins the current layout strikes over the next
   seconds (deterministic, no AudioContext involved), `?notescheck=1`
   compares the oval's tune against `fixtures/oval-notes.json`,
-  `?cam=top|carpet` picks the camera, and `window.__rug` / `window.__build`
+  `?cam=top|carpet` picks the camera, `?log=1` shows the session log under
+  the HUD (`__rug.session()`: seconds to the first touch, drag, pick-up,
+  placement, closed loop, moving train, bell and wind, plus the taps that
+  did nothing — for reading a cold test afterwards), and `window.__rug` /
+  `window.__build`
   expose the same from the console or a script (`__build.drag`, `.tap`,
   `.slot(i)`, `.endScreen(i)` drive the real gesture code;
   `__rug.renderAudio(sec, loops)` renders the next seconds through an
