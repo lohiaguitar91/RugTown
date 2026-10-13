@@ -9,13 +9,17 @@ the carpet and watch it run. **The floor was the first open world.**
   pillars, copyright ground rules, the toybox, toy systems (wind-ups, the
   carpet-level camera, the layout-as-music-box), pay-once monetization
   with no ads, the app-first + web-demo platform plan, tech plan, roadmap.
-- Status: design locked for Phase 0; the week-one spike is in
-  [`spike/carpet-cam/`](spike/carpet-cam/) (see below).
+- Status: design locked for Phase 0; the Phase 0 spike is in
+  [`spike/carpet-cam/`](spike/carpet-cam/) (see below) and **live at
+  [lohiaguitar91.github.io/RugTown](https://lohiaguitar91.github.io/RugTown/)**
+  (GitHub Pages, published from `main` on every push by
+  `.github/workflows/pages.yml`; the root page forwards to the toy). Open
+  it on a phone; a share link's `#` hash survives the forward.
 - **Phase 0 spike — the carpet-level camera, the crossing, the build verb,
-  and the sound.** Open `spike/carpet-cam/index.html` from any static server (no
-  build step, no dependencies) — e.g. `python3 -m http.server` from the
-  repo root, then on a phone on the same Wi-Fi open
-  `http://<laptop-ip>:8000/spike/carpet-cam/`. The rails are a graph of
+  and the sound.** Open the live page above, or `spike/carpet-cam/index.html`
+  from any static server (no build step, no dependencies) — e.g.
+  `python3 -m http.server` from the repo root, then on a phone on the same
+  Wi-Fi open `http://<laptop-ip>:8000/spike/carpet-cam/`. The rails are a graph of
   placed peg-and-hole pieces: drag a straight or a curve out of the toy bin
   and it ghost-snaps to the nearest open peg (a curve tries both hands);
   the first piece lands anywhere on the rug; drag a placed piece to move
